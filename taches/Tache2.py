@@ -38,7 +38,7 @@ def colorWipe( R, G, B):
         strip.setPixelColor(i, color)
         strip.show()
 
-
+# Define functions which animate LEDs in the choosed ways.
 def run(choosenLed, choosenColor, brightness=255):
     if 1 <= choosenLed <= 14 and choosenColor in colors:
         scaled_colors = [round(c * brightness / 255) for c in colors.get(choosenColor)]
