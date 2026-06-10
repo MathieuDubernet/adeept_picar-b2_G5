@@ -5,6 +5,7 @@ from numpy import sin, cos, pi
 import time
 class Adeept_SPI_LedPixel(threading.Thread):
 
+    # Définition d'un dictionnaire de couleurs pour les LED, associant les lettres R, G, B et N à leurs valeurs RGB correspondantes.
     colors = {
     "R": [255, 0, 0],
     "G": [0, 255, 0],
@@ -12,6 +13,7 @@ class Adeept_SPI_LedPixel(threading.Thread):
     "N": [0, 0, 0],
     }
 
+    # Initialisation de la classe Adeept_SPI_LedPixel, qui hérite de threading.Thread pour permettre l'exécution en parallèle.
     def __init__(self, count = 14, bright = 255, sequence='GRB', bus = 0, device = 0, *args, **kwargs):
         self.set_led_type(sequence)
         self.set_led_count(count)
@@ -27,6 +29,7 @@ class Adeept_SPI_LedPixel(threading.Thread):
         super(Adeept_SPI_LedPixel, self).__init__(*args, **kwargs)
         self.__flag = threading.Event()
         self.__flag.clear()
+    # Méthode pour initialiser la communication SPI avec les LED WS2812. Elle configure le bus et le périphérique SPI, et gère les erreurs potentielles liées à la configuration du Raspberry Pi.
     def led_begin(self, bus = 0, device = 0):
         self.bus = bus
         self.device = device
@@ -43,10 +46,12 @@ class Adeept_SPI_LedPixel(threading.Thread):
             else:
                 print("Please add 'dtoverlay=spi{}-2cs' at the bottom of the /boot/firmware/config.txt, then reboot the Raspberry Pi. otherwise spi{} will not be available.".format(self.bus, self.bus))
             self.led_init_state = 0
-            
+
+    # Méthode pour vérifier l'état de l'initialisation SPI. Elle retourne la variable led_init_state, qui indique si l'initialisation a réussi ou échoué.        
     def check_spi_state(self):
         return self.led_init_state
-        
+    
+    # Méthode pour afficher les informations sur les broches GPIO utilisées pour la communication SPI en fonction du bus sélectionné. Elle fournit des détails sur les broches MOSI, MISO, SCLK et CE pour chaque bus SPI disponible.    
     def spi_gpio_info(self):
         if self.bus == 0:
             print("SPI0-MOSI: GPIO10(WS2812-PIN)  SPI0-MISO: GPIO9  SPI0-SCLK: GPIO11  SPI0-CE0: GPIO8  SPI0-CE1: GPIO7")
@@ -63,15 +68,18 @@ class Adeept_SPI_LedPixel(threading.Thread):
         elif self.bus == 6:
             print("SPI6-MOSI: GPIO20(WS2812-PIN)  SPI6-MISO: GPIO19  SPI6-SCLK: GPIO21  SPI6-CE0: GPIO18  SPI6-CE1: GPIO27")
     
+    # Méthode pour fermer la communication SPI et éteindre toutes les LED en réglant leur couleur sur noir (0, 0, 0). Elle utilise la méthode set_all_led_rgb pour éteindre les LED avant de fermer la connexion SPI.
     def led_close(self):
         self.set_all_led_rgb([0,0,0])
         self.spi.close()
     
+    # Méthode pour définir le nombre de LED dans la bande LED WS2812. Elle initialise les listes led_color et led_original_color en fonction du nombre de LED spécifié, en les remplissant de valeurs initiales (0, 0, 0) pour chaque LED.
     def set_led_count(self, count):
         self.led_count = count
         self.led_color = [0,0,0] * self.led_count
         self.led_original_color = [0,0,0] * self.led_count
-    
+
+    # Méthode pour définir le type de LED en fonction de la séquence de couleurs spécifiée (par exemple, RGB, GRB, etc.). Elle utilise des listes pour déterminer les offsets de couleur rouge, verte et bleue en fonction de la séquence choisie. Si la séquence n'est pas valide, elle définit les offsets par défaut et retourne -1.
     def set_led_type(self, rgb_type):
         try:
             led_type = ['RGB','RBG','GRB','GBR','BRG','BGR']
@@ -87,11 +95,13 @@ class Adeept_SPI_LedPixel(threading.Thread):
             self.led_blue_offset = 2
             return -1
     
+    # Méthode pour régler la luminosité des LED. Elle prend une valeur de luminosité en entrée et ajuste les couleurs des LED en fonction de cette luminosité. Elle utilise la méthode set_led_rgb_data pour mettre à jour les couleurs des LED en fonction de la luminosité spécifiée.
     def set_led_brightness(self, brightness):
         self.led_brightness = brightness
         for i in range(self.led_count):
             self.set_led_rgb_data(i, self.led_original_color)
-            
+
+     # Méthode pour définir la couleur d'une LED spécifique en fonction de son index et des valeurs RGB fournies. Elle ajuste les couleurs en fonction de la luminosité définie et met à jour les listes led_color et led_original_color avec les nouvelles valeurs de couleur pour la LED spécifiée.       
     def set_ledpixel(self, index, r, g, b):
         p = [0,0,0]
         p[self.led_red_offset] = round(r * self.led_brightness / 255)
@@ -103,38 +113,47 @@ class Adeept_SPI_LedPixel(threading.Thread):
         for i in range(3):
             self.led_color[index*3+i] = p[i]
 
+    # Méthode pour définir la couleur d'une LED spécifique en fonction de son index et des valeurs RGB fournies, sans mettre à jour l'affichage immédiatement. Elle utilise la méthode set_ledpixel pour mettre à jour les couleurs des LED, mais n'appelle pas la méthode show pour afficher les changements.
     def set_led_color_data(self, index, r, g, b):
         self.set_ledpixel(index, r, g, b)  
-        
+
+    # Méthode pour définir la couleur d'une LED spécifique en fonction de son index et d'une liste de valeurs RGB, sans mettre à jour l'affichage immédiatement. Elle utilise la méthode set_ledpixel pour mettre à jour les couleurs des LED, mais n'appelle pas la méthode show pour afficher les changements.    
     def set_led_rgb_data(self, index, color):
         self.set_ledpixel(index, color[0], color[1], color[2])   
-        
+
+    # Méthode pour définir la couleur d'une LED spécifique en fonction de son index et des valeurs RGB fournies, puis mettre à jour l'affichage immédiatement. Elle utilise la méthode set_ledpixel pour mettre à jour les couleurs des LED, puis appelle la méthode show pour afficher les changements.    
     def set_led_color(self, index, r, g, b):
         self.set_ledpixel(index, r, g, b)
         self.show() 
-        
+
+    # Méthode pour définir la couleur d'une LED spécifique en fonction de son index et d'une liste de valeurs RGB, puis mettre à jour l'affichage immédiatement. Elle utilise la méthode set_ledpixel pour mettre à jour les couleurs des LED, puis appelle la méthode show pour afficher les changements.    
     def set_led_rgb(self, index, color):
         self.set_led_rgb_data(index, color)   
         self.show() 
     
+    # Méthode pour définir la même couleur pour toutes les LED en fonction des valeurs RGB fournies, sans mettre à jour l'affichage immédiatement. Elle utilise la méthode set_led_color_data pour mettre à jour les couleurs de toutes les LED, mais n'appelle pas la méthode show pour afficher les changements.
     def set_all_led_color_data(self, r, g, b):
         for i in range(self.led_count):
             self.set_led_color_data(i, r, g, b)
-            
+
+    # Méthode pour définir la même couleur pour toutes les LED en fonction d'une liste de valeurs RGB, sans mettre à jour l'affichage immédiatement. Elle utilise la méthode set_led_rgb_data pour mettre à jour les couleurs de toutes les LED, mais n'appelle pas la méthode show pour afficher les changements.        
     def set_all_led_rgb_data(self, color):
         for i in range(self.led_count):
-            self.set_led_rgb_data(i, color)   
-        
+            self.set_led_rgb_data(i, color)  
+
+    # Méthode pour définir la même couleur pour toutes les LED en fonction des valeurs RGB fournies, puis mettre à jour l'affichage immédiatement. Elle utilise la méthode set_led_color_data pour mettre à jour les couleurs de toutes les LED, puis appelle la méthode show pour afficher les changements.    
     def set_all_led_color(self, r, g, b):
         for i in range(self.led_count):
             self.set_led_color_data(i, r, g, b)
         self.show()
-        
+
+    # Méthode pour définir la même couleur pour toutes les LED en fonction d'une liste de valeurs RGB, puis mettre à jour l'affichage immédiatement. Elle utilise la méthode set_led_rgb_data pour mettre à jour les couleurs de toutes les LED, puis appelle la méthode show pour afficher les changements.    
     def set_all_led_rgb(self, color):
         for i in range(self.led_count):
             self.set_led_rgb_data(i, color) 
         self.show()
-    
+
+    # Méthode pour convertir les données de couleur des LED en un format compatible avec le protocole de communication SPI utilisé par les LED WS2812. Elle utilise la bibliothèque numpy pour manipuler les données de couleur et préparer les données à envoyer via SPI en fonction des timings spécifiques requis par les LED WS2812.
     def write_ws2812_numpy8(self):
         d = numpy.array(self.led_color).ravel()        #Converts data into a one-dimensional array
         tx = numpy.zeros(len(d)*8, dtype=numpy.uint8)  #Each RGB color has 8 bits, each represented by a uint8 type data
@@ -145,7 +164,8 @@ class Adeept_SPI_LedPixel(threading.Thread):
                 self.spi.xfer(tx.tolist(), int(8/1.25e-6))         #Send color data at a frequency of 6.4Mhz
             else:
                 self.spi.xfer(tx.tolist(), int(8/1.0e-6))          #Send color data at a frequency of 8Mhz
-        
+
+    # Méthode pour convertir les données de couleur des LED en un format compatible avec le protocole de communication SPI utilisé par les LED WS2812, en utilisant une approche différente pour représenter les bits de données. Elle utilise la bibliothèque numpy pour manipuler les données de couleur et préparer les données à envoyer via SPI en fonction des timings spécifiques requis par les LED WS2812, en utilisant une représentation différente pour les bits de données (T0H=0x06, T0L=0x60, T1H=0x60, T1L=0x06).    
     def write_ws2812_numpy4(self):
         d=numpy.array(self.led_color).ravel()
         tx=numpy.zeros(len(d)*4, dtype=numpy.uint8)
@@ -156,14 +176,16 @@ class Adeept_SPI_LedPixel(threading.Thread):
                 self.spi.xfer(tx.tolist(), int(4/1.25e-6))         
             else:
                 self.spi.xfer(tx.tolist(), int(4/1.0e-6))       
-        
+
+    # Méthode pour afficher les couleurs des LED en utilisant la méthode de conversion de données appropriée en fonction du mode spécifié. Elle appelle soit la méthode write_ws2812_numpy8, soit la méthode write_ws2812_numpy4 pour envoyer les données de couleur via SPI en fonction du mode sélectionné.    
     def show(self, mode = 1):
         if mode == 1:
             write_ws2812 = self.write_ws2812_numpy8
         else:
             write_ws2812 = self.write_ws2812_numpy4
         write_ws2812()
-        
+
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.    
     def wheel(self, pos):
         if pos < 85:
             return [(255 - pos * 3), (pos * 3), 0]
@@ -174,6 +196,7 @@ class Adeept_SPI_LedPixel(threading.Thread):
             pos = pos - 170
             return [(pos * 3), 0, (255 - pos * 3)]
     
+    # Méthode pour convertir les valeurs de couleur en format HSV (Hue, Saturation, Value) en format RGB (Red, Green, Blue). Elle prend en entrée les valeurs de teinte (h), de saturation (s) et de valeur (v), et retourne une liste contenant les valeurs RGB correspondantes. La conversion est effectuée en fonction des différentes plages de teinte et des calculs nécessaires pour déterminer les composantes RGB en fonction de la saturation et de la valeur.
     def hsv2rgb(self, h, s, v):
         h = h % 360
         rgb_max = round(v * 2.55)
@@ -207,21 +230,23 @@ class Adeept_SPI_LedPixel(threading.Thread):
             b = rgb_max - rgb_adj
         return [r, g, b]
     
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.
     def police(self):
         self.lightMode = 'police'
         self.resume()
-        
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.    
     def breath(self, R_input, G_input, B_input):
         self.lightMode = 'breath'
         self.colorBreathR = R_input
         self.colorBreathG = G_input
         self.colorBreathB = B_input
         self.resume()    
-            
+
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.        
     def resume(self):
         self.__flag.set()
 
-
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.    
     def breathProcessing(self):
         while self.lightMode == 'breath':
             for i in range(0,self.breathSteps):
@@ -236,6 +261,8 @@ class Adeept_SPI_LedPixel(threading.Thread):
                 self.set_all_led_color(self.colorBreathR-(self.colorBreathR*i/self.breathSteps), self.colorBreathG-(self.colorBreathG*i/self.breathSteps), self.colorBreathB-(self.colorBreathB*i/self.breathSteps))
                 #self.show()
                 time.sleep(0.03)
+
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.
     def policeProcessing(self):
         while self.lightMode == 'police':
             for i in range(0,3):
@@ -257,7 +284,7 @@ class Adeept_SPI_LedPixel(threading.Thread):
                 time.sleep(0.05)
             time.sleep(0.1)
             
-            
+    # Méthode pour gérer les changements de mode d'éclairage en fonction de la valeur de lightMode. Elle appelle les méthodes correspondantes pour le mode "police" et le mode "breath", ou met en pause l'exécution si le mode est "none".        
     def lightChange(self):
         if self.lightMode == 'none':
             self.pause()
@@ -265,7 +292,8 @@ class Adeept_SPI_LedPixel(threading.Thread):
             self.policeProcessing()
         elif self.lightMode == 'breath':
             self.breathProcessing()    
-    
+
+    # Méthode pour mettre en pause l'exécution du thread en utilisant un événement de synchronisation. Elle utilise la méthode clear de l'événement pour bloquer le thread jusqu'à ce qu'il soit repris.
     def run(self):
         while 1:
             self.__flag.wait()
@@ -273,7 +301,15 @@ class Adeept_SPI_LedPixel(threading.Thread):
             pass
         
        
+    """
+    Méthode pour définir la couleur d'une LED spécifique en fonction de son index, de la couleur choisie et de la luminosité. Elle vérifie si le numéro de LED est valide (entre 1 et 14) et si la couleur choisie est présente dans le dictionnaire de couleurs. Si les conditions sont remplies, elle ajuste les valeurs RGB en fonction de la luminosité spécifiée et utilise la méthode set_led_rgb pour mettre à jour la couleur de la LED correspondante. Si les conditions ne sont pas remplies, un message d'erreur est affiché pour informer l'utilisateur des entrées invalides.
+    arguments:
 
+    - choosenLed: Le numéro de la LED à allumer (entre 1 et 14).
+    - choosenColor: La couleur à afficher sur la LED, représentée par une lettre (R, G, B, N).
+    - brightness: La luminosité de la LED (entre 0 et 255).
+
+    """
     def set_one_led(self, choosenLed, choosenColor, brightness=255):
         if 1 <= choosenLed <= 14 and choosenColor in self.colors:
             scaled_colors = [round(c * brightness / 255) for c in self.colors.get(choosenColor)]
@@ -285,10 +321,13 @@ class Adeept_SPI_LedPixel(threading.Thread):
 
 """
 
-Fonction principale qui gère l'interaction avec l'utilisateur pour sélectionner une LED,une couleur et une luminosité,
-puis allume la LED correspondante en utilisant la fonction run. Si le modèle de Raspberry Pi 5 est détecté, un message 
-d'avertissement est affiché et la fonction run n'est pas exécutée, car la bande LED WS2812 n'est pas prise en charge sur ce
-modèle.
+Fonction principale qui crée une instance de la classe Adeept_SPI_LedPixel
+avec 14 LED et une luminosité maximale de 255.
+Elle utilise une boucle pour permettre à l'utilisateur de saisir le numéro de la LED,
+la couleur et la luminosité souhaités. Les entrées sont vérifiées pour s'assurer qu'elles sont valides,
+et si elles le sont, la méthode set_one_led est appelée pour mettre à jour la couleur de la LED correspondante. 
+Si l'utilisateur interrompt le programme (par exemple, en appuyant sur Ctrl+C), la méthode led_close est appelée 
+pour éteindre les LED et fermer la communication SPI proprement.
 
 """
 if __name__ == '__main__':
