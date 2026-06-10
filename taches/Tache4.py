@@ -1,21 +1,14 @@
-#!/usr/bin/env python3
-# File name : motor_servo_control.py
-# Adeept PiCar-B2 - Contrôle moteur DC + servomoteur direction
-
 import time
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import motor, servo
 
-# ══════════════════════════════════════════════
-#  CONSTANTES
-# ══════════════════════════════════════════════
 
 MOTOR_M1_IN1 = 9       # Pôle positif M1
 MOTOR_M1_IN2 = 8       # Pôle négatif M1
 
-SERVO_DIR_CHANNEL = 0   # Canal PCA9685 du servo de direction
+SERVO_DIR_CHANNEL = 0
 SERVO_MIN_PULSE   = 500
 SERVO_MAX_PULSE   = 2400
 
@@ -27,9 +20,6 @@ SERVO_CENTER  = 140      # Position centrale (à ajuster)
 SERVO_LEFT    = SERVO_CENTER - 30  # Limite gauche (à ajuster)
 SERVO_RIGHT   = SERVO_CENTER + 30  # Limite droite (à ajuster)
 
-# ══════════════════════════════════════════════
-#  INITIALISATION I2C / PCA9685
-# ══════════════════════════════════════════════
 
 i2c       = busio.I2C(SCL, SDA)
 pca       = PCA9685(i2c, address=0x5f)
@@ -39,31 +29,17 @@ motor1 = motor.DCMotor(pca.channels[MOTOR_M1_IN1],
                        pca.channels[MOTOR_M1_IN2])
 motor1.decay_mode = motor.SLOW_DECAY
 
-# ══════════════════════════════════════════════
-#  UTILITAIRES
-# ══════════════════════════════════════════════
 
 def map_val(x, in_min, in_max, out_min, out_max):
-    """Remap une valeur d'une plage vers une autre."""
     return (x - in_min) / (in_max - in_min) * (out_max - out_min) + out_min
 
 
-# ══════════════════════════════════════════════
-#  MOTEUR DC
-# ══════════════════════════════════════════════
-
 def motorStop():
-    """Arrêt immédiat du moteur."""
     motor1.throttle = 0
     print("[MOTEUR] Arrêt")
 
 
 def Motor(direction, speed_pct):
-    """
-    Pilotage simple du moteur.
-    direction : DIR_FORWARD (1) ou DIR_BACKWARD (-1)
-    speed_pct : vitesse en % (0-100)
-    """
     speed_pct = max(0, min(100, speed_pct))           # Clamp 0-100
     throttle  = map_val(speed_pct, 0, 100, 0.0, 1.0)
     motor1.throttle = throttle * direction
@@ -72,17 +48,6 @@ def Motor(direction, speed_pct):
 
 
 def MotorRamp(direction, target_speed_pct, ramp_time=1.0, start_speed=0):
-    """
-    Pilotage avec rampe de montée/descente en vitesse.
-
-    Paramètres :
-      direction       : DIR_FORWARD ou DIR_BACKWARD
-      target_speed_pct: vitesse cible en % (0-100)
-      ramp_time       : durée de la rampe en secondes (défaut 1.0s)
-      start_speed     : vitesse de départ en % (défaut 0)
-
-    La rampe se fait en 20 paliers pour un mouvement fluide.
-    """
     target_speed_pct = max(0, min(100, target_speed_pct))
     steps      = 20
     step_delay = ramp_time / steps
@@ -99,23 +64,11 @@ def MotorRamp(direction, target_speed_pct, ramp_time=1.0, start_speed=0):
 
 
 def MotorFull(direction, target_speed_pct, ramp_time=1.0):
-    """
-    Fonction complète : rampe montée → maintien → rampe descente → arrêt.
-
-    Paramètres :
-      direction        : DIR_FORWARD ou DIR_BACKWARD
-      target_speed_pct : vitesse cible en % (0-100)
-      ramp_time        : durée de chaque rampe en secondes
-    """
     MotorRamp(direction, target_speed_pct, ramp_time)   # Montée
     time.sleep(1.0)                                      # Maintien 1s
     MotorRamp(direction, 0, ramp_time, target_speed_pct) # Descente
     motorStop()
 
-
-# ══════════════════════════════════════════════
-#  SERVOMOTEUR DE DIRECTION
-# ══════════════════════════════════════════════
 
 def set_angle(channel, angle):
     """Positionne un servo sur un angle (0-180°)."""
@@ -130,11 +83,6 @@ def setDirection(angle):
     set_angle(SERVO_DIR_CHANNEL, angle)
     print(f"[SERVO] Direction → {angle}°")
 
-
-
-# ══════════════════════════════════════════════
-#  DESTROY
-# ══════════════════════════════════════════════
 
 def destroy():
     motorStop()

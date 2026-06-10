@@ -38,7 +38,11 @@ def test(channel):
     time.sleep(0.5)
 
 if __name__ == "__main__":
-    channel = 1  # 1 pour coup, 2 pour tete, 0 pour direction
-    while True:
-        test(channel)
+    channel = 0  # 1 pour coup, 2 pour tete, 0 pour direction
+    set_angle(channel, 90)  # Positionne le servo de direction à 90° (milieu)
+    time.sleep(1)
+    set_angle(channel, 0)   # Tourne le servo de direction à 0° (gauche)
+    time.sleep(1)
+    set_angle(channel, 180) # Tourne le servo de direction à 180° (droite)
+    time.sleep(1)
 

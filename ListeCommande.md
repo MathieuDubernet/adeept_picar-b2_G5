@@ -4,4 +4,9 @@
  
  pscp "C:\Users\matdu\Desktop\Cours_ING1\Annee_1\MasterCamp\Test.txt" user@192.168.4.1:/home/user/
 
- 
+## Kill python running en background
+
+sudo pkill -f python3
+
+# ou plus ciblé :
+sudo pkill -f 01_LED.py
