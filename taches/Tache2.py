@@ -16,7 +16,7 @@ colors = {
     "G": [0, 255, 0],
     "B": [0, 0, 255],
     "N": [0, 0, 0],
-}
+} # Dictionnaire de couleurs pour les LED (R, G, B, N pour éteint).
 
 def setup():
   global strip
@@ -30,7 +30,14 @@ def setup():
   strip.begin()
   # strip.setBrightness(10) # 0~255, règle la luminosité de la LED RVB WS2812.
 
+"""
+
 # Définition des fonctions qui animent les LED de différentes manières.
+
+Arguments:
+R, G, B – les valeurs de couleur rouge, verte et bleue (0-255) pour la fonction colorWipe.
+
+"""
 def colorWipe( R, G, B):
     """Balaye une couleur sur tout l'affichage, un pixel à la fois."""
     color = Color(R,G,B)
@@ -38,13 +45,15 @@ def colorWipe( R, G, B):
         strip.setPixelColor(i, color)
         strip.show()
 
-# 
+
 """
-Définition de la fonction qui pilote la LED choisie de la manière choisie.
+
+Fonction pour allumer une LED spécifique avec une couleur et une luminosité données.
 
 Arguments:
-name  – first namon, must be int
-d     – to return Person as `dict` (default=False)
+choosenLed – le numéro de la LED à allumer (1-14).
+choosenColor – la couleur à afficher (R, G, B, N pour éteint).
+brightness – la luminosité de la LED (0-255, par défaut 255 pour la luminosité maximale).
 
 """
 def run(choosenLed, choosenColor, brightness=255):
@@ -55,7 +64,14 @@ def run(choosenLed, choosenColor, brightness=255):
     else:
         print("\033[1;31m Invalid input. Please enter a number between 1 and 14 for the LED and a color (R, G, B, N).\033[0m")
 
+"""
+Fonction pour vérifier le modèle de Raspberry Pi et afficher un message d'avertissement si le modèle 5 est détecté,
+car la bande LED WS2812 n'est pas officiellement prise en charge sur ce modèle.
 
+returns:
+3, 4, 5 ou None selon le modèle de Raspberry Pi détecté.
+
+"""
 def check_rpi_model():
     _, result = run_command("cat /proc/device-tree/model |awk '{print $3}'")
     result = result.strip()
@@ -68,6 +84,16 @@ def check_rpi_model():
     else:
         return None
 
+"""
+Fonction pour exécuter une commande shell et retourner son statut et sa sortie.
+Arguments:
+cmd – la commande shell à exécuter.
+
+Retourne:
+status – le code de retour de la commande (0 pour succès, autre pour erreur).
+result – la sortie de la commande en tant que chaîne de caractères.
+
+"""
 def run_command(cmd=""):
     import subprocess
     p = subprocess.Popen(
@@ -75,7 +101,15 @@ def run_command(cmd=""):
     result = p.stdout.read().decode('utf-8')
     status = p.poll()
     return status, result
-    
+
+"""
+
+Fonction principale qui gère l'interaction avec l'utilisateur pour sélectionner une LED,une couleur et une luminosité,
+puis allume la LED correspondante en utilisant la fonction run. Si le modèle de Raspberry Pi 5 est détecté, un message 
+d'avertissement est affiché et la fonction run n'est pas exécutée, car la bande LED WS2812 n'est pas prise en charge sur ce
+modèle.
+
+"""
 if __name__ == '__main__':
     try:
       value = 1
