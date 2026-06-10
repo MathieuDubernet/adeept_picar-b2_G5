@@ -2,15 +2,15 @@ import time
 from rpi_ws281x import *
 import argparse
 
-# LED strip configuration:
-LED_COUNT      = 14      # Number of LED pixels.
-LED_PIN        = 12      # GPIO pin connected to the pixels (18 uses PWM!).
-#LED_PIN        = 10      # GPIO pin connected to the pixels (10 uses SPI /dev/spidev0.0).
-LED_FREQ_HZ    = 800000  # LED signal frequency in hertz (usually 800khz)
-LED_DMA        = 10      # DMA channel to use for generating signal (try 10)
-LED_BRIGHTNESS = 100     # Set to 0 for darkest and 255 for brightest
-LED_INVERT     = False   # True to invert the signal (when using NPN transistor level shift)
-LED_CHANNEL    = 0       # set to '1' for GPIOs 13, 19, 41, 45 or 53
+# Configuration de la bande LED :
+LED_COUNT      = 14      # Nombre de pixels LED.
+LED_PIN        = 12      # Broche GPIO reliée aux pixels (12 utilise le PWM matériel).
+#LED_PIN        = 10     # Broche GPIO reliée aux pixels (10 utilise le SPI /dev/spidev0.0).
+LED_FREQ_HZ    = 800000  # Fréquence du signal LED en hertz (généralement 800 kHz).
+LED_DMA        = 10      # Canal DMA utilisé pour générer le signal (essayer 10).
+LED_BRIGHTNESS = 100     # 0 = le plus sombre, 255 = le plus lumineux.
+LED_INVERT     = False   # True pour inverser le signal (adaptation de niveau par transistor NPN).
+LED_CHANNEL    = 0       # Mettre à 1 pour les GPIO 13, 19, 41, 45 ou 53.
 colors = {
     "R": [255, 0, 0],
     "G": [0, 255, 0],
@@ -24,21 +24,29 @@ def setup():
   parser.add_argument('-c', '--clear', action='store_true', help='clear the display on exit')
   args = parser.parse_args()
 
-  # Create NeoPixel object with appropriate configuration.
+  # Création de l'objet NeoPixel avec la configuration appropriée.
   strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
-  # Intialize the library (must be called once before other functions).
+  # Initialisation de la bibliothèque (à appeler une seule fois avant toute autre fonction).
   strip.begin()
-  # strip.setBrightness(10) # 0~255, set WS2812 RGB LED Brightness.
+  # strip.setBrightness(10) # 0~255, règle la luminosité de la LED RVB WS2812.
 
-# Define functions which animate LEDs in various ways.
+# Définition des fonctions qui animent les LED de différentes manières.
 def colorWipe( R, G, B):
-    """Wipe color across display a pixel at a time."""
+    """Balaye une couleur sur tout l'affichage, un pixel à la fois."""
     color = Color(R,G,B)
     for i in range(strip.numPixels()):
         strip.setPixelColor(i, color)
         strip.show()
 
-# Define functions which animate LEDs in the choosed ways.
+# 
+"""
+Définition de la fonction qui pilote la LED choisie de la manière choisie.
+
+Arguments:
+name  – first namon, must be int
+d     – to return Person as `dict` (default=False)
+
+"""
 def run(choosenLed, choosenColor, brightness=255):
     if 1 <= choosenLed <= 14 and choosenColor in colors:
         scaled_colors = [round(c * brightness / 255) for c in colors.get(choosenColor)]
@@ -101,5 +109,3 @@ if __name__ == '__main__':
         run(int(choosenLed), choosenColor, int(choosenBrightness))
     except KeyboardInterrupt:
       colorWipe(0, 0, 0)
-
-
