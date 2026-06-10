@@ -1,176 +1,123 @@
-#!/usr/bin/env python
-# File name : led_control.py
-# Adeept PiCar-B2 - Contrôle des LEDs
-
 from gpiozero import PWMOutputDevice as PWM
 from gpiozero import LED
 import time
 
-# ─── GPIO des LEDs RGB (feux avant - logique inversée) ───
-Left_R  = 19
-Left_G  = 0
-Left_B  = 13
-Right_R = 1
-Right_G = 5
-Right_B = 6
+class Adeept_LED_Control:
 
-# ─── GPIO des 3 LEDs simples ───
-LED1_PIN = 9
-LED2_PIN = 25
-LED3_PIN = 11
+    def __init__(self):
+        self.Left_R  = 19
+        self.Left_G  = 0
+        self.Left_B  = 13
+        self.Right_R = 1
+        self.Right_G = 5
+        self.Right_B = 6
+        self.LED1_PIN = 9
+        self.LED2_PIN = 25
+        self.LED3_PIN = 11
 
-# ─── Palette de couleurs ───
-colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00,
-          0xFF00FF, 0x00FFFF, 0x6F00D2, 0xFF5809]
-
-# ─── Variables globales ───
-L_R = L_G = L_B = None
-R_R = R_G = R_B = None
-led1 = led2 = led3 = None
-
-
-# ══════════════════════════════════════════════
-#  SETUP
-# ══════════════════════════════════════════════
-
-def setup():
-    global L_R, L_G, L_B, R_R, R_G, R_B
-    global led1, led2, led3
+    colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00,
+            0xFF00FF, 0x00FFFF, 0x6F00D2, 0xFF5809]
 
     # LEDs RGB PWM (initial_value=1.0 = éteint car logique inversée)
-    L_R = PWM(pin=Left_R,  initial_value=1.0, frequency=2000)
-    L_G = PWM(pin=Left_G,  initial_value=1.0, frequency=2000)
-    L_B = PWM(pin=Left_B,  initial_value=1.0, frequency=2000)
-    R_R = PWM(pin=Right_R, initial_value=1.0, frequency=2000)
-    R_G = PWM(pin=Right_G, initial_value=1.0, frequency=2000)
-    R_B = PWM(pin=Right_B, initial_value=1.0, frequency=2000)
+    def setup(self):
+        
+        self.L_R = PWM(pin=self.Left_R,  initial_value=1.0, frequency=2000)
+        self.L_G = PWM(pin=self.Left_G,  initial_value=1.0, frequency=2000)
+        self.L_B = PWM(pin=self.Left_B,  initial_value=1.0, frequency=2000)
+        self.R_R = PWM(pin=self.Right_R, initial_value=1.0, frequency=2000)
+        self.R_G = PWM(pin=self.Right_G, initial_value=1.0, frequency=2000)
+        self.R_B = PWM(pin=self.Right_B, initial_value=1.0, frequency=2000)
 
-    # LEDs simples ON/OFF
-    led1 = LED(LED1_PIN)
-    led2 = LED(LED2_PIN)
-    led3 = LED(LED3_PIN)
-
-
-# ══════════════════════════════════════════════
-#  UTILITAIRES
-# ══════════════════════════════════════════════
-
-def map_val(x, in_min, in_max, out_min, out_max):
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+        # LEDs simples ON/OFF
+        self.led1 = LED(self.LED1_PIN)
+        self.led2 = LED(self.LED2_PIN)
+        self.led3 = LED(self.LED3_PIN)
 
 
-# ══════════════════════════════════════════════
-#  CONTRÔLE COULEUR (LEDs RGB)
-# ══════════════════════════════════════════════
-
-def setAllColor(col):
-    """Applique une couleur hex (ex: 0xFF0000) aux 6 LEDs RGB."""
-    R_val = map_val((col & 0xFF0000) >> 16, 0, 255, 0, 1.0)
-    G_val = map_val((col & 0x00FF00) >> 8,  0, 255, 0, 1.0)
-    B_val = map_val((col & 0x0000FF),        0, 255, 0, 1.0)
-
-    L_R.value = 1.0 - R_val
-    L_G.value = 1.0 - G_val
-    L_B.value = 1.0 - B_val
-    R_R.value = 1.0 - R_val
-    R_G.value = 1.0 - G_val
-    R_B.value = 1.0 - B_val
+    def map_val(self, x, in_min, in_max, out_min, out_max):
+        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 
-def setAllRGBColor(R, G, B):
-    """Applique une couleur RGB (0-255) aux 6 LEDs RGB."""
-    R_val = map_val(R, 0, 255, 0, 1.0)
-    G_val = map_val(G, 0, 255, 0, 1.0)
-    B_val = map_val(B, 0, 255, 0, 1.0)
 
-    L_R.value = 1.0 - R_val
-    L_G.value = 1.0 - G_val
-    L_B.value = 1.0 - B_val
-    R_R.value = 1.0 - R_val
-    R_G.value = 1.0 - G_val
-    R_B.value = 1.0 - B_val
+    def setAllRGBColor(self, R, G, B):
+        """Applique une couleur RGB (0-255) aux 6 LEDs RGB."""
+        R_val = self.map_val(R, 0, 255, 0, 1.0)
+        G_val = self.map_val(G, 0, 255, 0, 1.0)
+        B_val = self.map_val(B, 0, 255, 0, 1.0)
 
-
-# ══════════════════════════════════════════════
-#  CONTRÔLE INDIVIDUEL ON/OFF (toutes les 9 LEDs)
-# ══════════════════════════════════════════════
-
-def set_led(num, state):
-    """
-    Pilote individuellement chaque LED.
-    num   : 1 à 9
-    state : True/1 = allumer, False/0 = éteindre
-
-    Mapping :
-      1 → LED1 (simple)
-      2 → LED2 (simple)
-      3 → LED3 (simple)
-      4 → Left_R  (RGB PWM, logique inversée)
-      5 → Left_G
-      6 → Left_B
-      7 → Right_R
-      8 → Right_G
-      9 → Right_B
-    """
-    # LEDs simples (logique directe)
-    if num == 1:
-        led1.on()  if state else led1.off()
-    elif num == 2:
-        led2.on()  if state else led2.off()
-    elif num == 3:
-        led3.on()  if state else led3.off()
-
-    # LEDs RGB PWM (logique INVERSÉE : 0.0 = allumé, 1.0 = éteint)
-    elif num == 4:
-        L_R.value = 0.0 if state else 1.0
-    elif num == 5:
-        L_G.value = 0.0 if state else 1.0
-    elif num == 6:
-        L_B.value = 0.0 if state else 1.0
-    elif num == 7:
-        R_R.value = 0.0 if state else 1.0
-    elif num == 8:
-        R_G.value = 0.0 if state else 1.0
-    elif num == 9:
-        R_B.value = 0.0 if state else 1.0
-    else:
-        print(f"Numéro de LED invalide : {num} (attendu : 1 à 9)")
+        self.L_R.value = 1.0 - R_val
+        self.L_G.value = 1.0 - G_val
+        self.L_B.value = 1.0 - B_val
+        self.R_R.value = 1.0 - R_val
+        self.R_G.value = 1.0 - G_val
+        self.R_B.value = 1.0 - B_val
 
 
-def all_off():
-    """Éteint toutes les LEDs."""
-    for i in range(1, 10):
-        set_led(i, False)
+    def set_led(self, num, state):
+        """
+        Pilote individuellement chaque LED.
+        num   : 1 à 9
+        state : True/1 = allumer, False/0 = éteindre
+
+        Mapping :
+        1 → LED1 (simple)
+        2 → LED2 (simple)
+        3 → LED3 (simple)
+        4 → Left_R  (RGB PWM, logique inversée)
+        5 → Left_G
+        6 → Left_B
+        7 → Right_R
+        8 → Right_G
+        9 → Right_B
+        """
+        # LEDs simples (logique directe)
+        if num == 1:
+            self.led1.on()  if state else self.led1.off()
+        elif num == 2:
+            self.led2.on()  if state else self.led2.off()
+        elif num == 3:
+            self.led3.on()  if state else self.led3.off()
+
+        # LEDs RGB PWM (logique INVERSÉE : 0.0 = allumé, 1.0 = éteint)
+        elif num == 4:
+            self.L_R.value = 0.0 if state else 1.0
+        elif num == 5:
+            self.L_G.value = 0.0 if state else 1.0
+        elif num == 6:
+            self.L_B.value = 0.0 if state else 1.0
+        elif num == 7:
+            self.R_R.value = 0.0 if state else 1.0
+        elif num == 8:
+            self.R_G.value = 0.0 if state else 1.0
+        elif num == 9:
+            self.R_B.value = 0.0 if state else 1.0
+        else:
+            print(f"Numéro de LED invalide : {num} (attendu : 1 à 9)")
 
 
-# ══════════════════════════════════════════════
-#  DEMO COULEURS (boucle arc-en-ciel)
-# ══════════════════════════════════════════════
-
-def loop():
-    while True:
-        for col in colors:
-            setAllColor(col)
-            time.sleep(0.5)
+    def all_off(self):
+        """Éteint toutes les LEDs."""
+        for i in range(1, 10):
+            self.set_led(i, False)
 
 
-# ══════════════════════════════════════════════
-#  DESTROY
-# ══════════════════════════════════════════════
-
-def destroy():
-    all_off()
-    L_R.close(); L_G.close(); L_B.close()
-    R_R.close(); R_G.close(); R_B.close()
-    led1.close(); led2.close(); led3.close()
-    print("GPIO libérés.")
+    def loop(self):
+        while True:
+            for col in self.colors:
+                self.setAllColor(col)
+                time.sleep(0.5)
 
 
-# ══════════════════════════════════════════════
-#  MAIN — Contrôle manuel via input()
-# ══════════════════════════════════════════════
+    def destroy(self):
+        self.all_off()
+        self.L_R.close(); self.L_G.close(); self.L_B.close()
+        self.R_R.close(); self.R_G.close(); self.R_B.close()
+        self.led1.close(); self.led2.close(); self.led3.close()
+        print("GPIO libérés.")
 
-def main():
+
+def main(adeept_led_control):
+
     print("╔══════════════════════════════════════╗")
     print("║     Contrôle manuel des LEDs         ║")
     print("╠══════════════════════════════════════╣")
@@ -189,7 +136,7 @@ def main():
                 break
 
             if cmd == "00":
-                all_off()
+                adeept_led_control.all_off()
                 print("Toutes les LEDs éteintes.")
                 continue
 
@@ -202,10 +149,10 @@ def main():
                 continue
 
             if action == 1:
-                set_led(num, True)
+                adeept_led_control.set_led(num, True)
                 print(f"LED{num} allumée.")
             elif action == 2:
-                set_led(num, False)
+                adeept_led_control.set_led(num, False)
                 print(f"LED{num} éteinte.")
             else:
                 print("Commande invalide. Exemples : 11, 19, 21, 29")
@@ -217,10 +164,11 @@ def main():
 
 
 if __name__ == "__main__":
-    setup()
+    controlLed = Adeept_LED_Control()
+    controlLed.setup()
     try:
-        main()
+        main(controlLed)
     except Exception as e:
         print(f"Erreur : {e}")
     finally:
-        destroy()
+        controlLed.destroy()
