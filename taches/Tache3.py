@@ -5,122 +5,127 @@ import busio
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 
-# Adresse PCA
-PCA_ADDR = 0x5f
 
-# Canaux utilisés
-SERVO_TEST = 4
-SERVOS_ROBOT = [0, 1, 2]
-ALL_SERVOS = [0, 1, 2, 4]
+class ServoController(object):
+    def __init__(self):
+        self.address = 0x5F
+        self.frequency = 50
+        self.angle_min = 10
+        self.angle_max = 170
+        self.servo_test = 4
+        self.servos_robot = [0, 1, 2]
+        self.all_servos = [0, 1, 2, 4]
 
-# Réglages de sécurité
-ANGLE_MIN = 10
-ANGLE_MAX = 170
-FREQ = 50
+        self.i2c = busio.I2C(SCL, SDA)
+        self.pca = PCA9685(self.i2c, address=self.address)
+        self.pca.frequency = self.frequency
 
-# Initialisation
-i2c = busio.I2C(SCL, SDA)
-pca = PCA9685(i2c, address=PCA_ADDR)
-pca.frequency = FREQ
+        self.servos = {
+            0: servo.Servo(self.pca.channels[0], min_pulse=500, max_pulse=2400, actuation_range=180),
+            1: servo.Servo(self.pca.channels[1], min_pulse=500, max_pulse=2400, actuation_range=180),
+            2: servo.Servo(self.pca.channels[2], min_pulse=500, max_pulse=2400, actuation_range=180),
+            4: servo.Servo(self.pca.channels[4], min_pulse=500, max_pulse=2400, actuation_range=180),
+        }
 
-# Création des objets servo
-servos = {
-    0: servo.Servo(pca.channels[0], min_pulse=500, max_pulse=2400, actuation_range=180),
-    1: servo.Servo(pca.channels[1], min_pulse=500, max_pulse=2400, actuation_range=180),
-    2: servo.Servo(pca.channels[2], min_pulse=500, max_pulse=2400, actuation_range=180),
-    4: servo.Servo(pca.channels[4], min_pulse=500, max_pulse=2400, actuation_range=180),
-}
+    def clampAngle(self, angle):
+        angle = int(angle)
+        if angle < self.angle_min:
+            return self.angle_min
+        if angle > self.angle_max:
+            return self.angle_max
+        return angle
 
-def clamp_angle(angle):
-    angle = int(angle)
-    if angle < ANGLE_MIN:
-        return ANGLE_MIN
-    if angle > ANGLE_MAX:
-        return ANGLE_MAX
-    return angle
+    def setAngle(self, channel, angle):
+        if channel not in self.servos:
+            raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
-def set_servo(num_servo, angle):
-    """
-    Commande un servo par son numéro de canal et son angle.
-    Exemple: set_servo(4, 90)
-    """
-    if num_servo not in servos:
-        raise ValueError(f"Servo invalide: {num_servo}. Choix possibles: {ALL_SERVOS}")
+        safe_angle = self.clampAngle(angle)
+        self.servos[channel].angle = safe_angle
+        time.sleep(0.05)
+        return safe_angle
 
-    safe_angle = clamp_angle(angle)
-    servos[num_servo].angle = safe_angle
-    time.sleep(0.05)
+    def centerAll(self):
+        for ch in self.all_servos:
+            self.setAngle(ch, 90)
 
-def centre_all():
-    for ch in ALL_SERVOS:
-        set_servo(ch, 90)
+    def testServo(self, channel):
+        if channel not in self.servos:
+            raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
-def test_servo(channel):
-    print(f"Test du servo sur CH{channel}")
-    for angle in [60, 90, 120, 90]:
-        set_servo(channel, angle)
-        print(f"CH{channel} -> {angle}°")
-        time.sleep(1)
+        print(f"Test du servo sur CH{channel}")
+        for angle in [60, 90, 120, 90]:
+            self.setAngle(channel, angle)
+            print(f"CH{channel} -> {angle}°")
+            time.sleep(1)
 
-def manual_mode():
-    print("\nMode manuel")
-    print("Servos disponibles : 0, 1, 2, 4")
-    print(f"Angles autorisés : {ANGLE_MIN} à {ANGLE_MAX}")
-    print("Commande : numero angle   (ex: 4 90)")
-    print("Commandes spéciales : center, test, quit\n")
+    def releaseAll(self):
+        for ch in self.all_servos:
+            try:
+                self.servos[ch].angle = None
+            except Exception:
+                pass
 
-    while True:
-        cmd = input(">>> ").strip().lower()
-
-        if cmd in ("quit", "exit", "q"):
-            break
-
-        if cmd == "center":
-            centre_all()
-            print("Tous les servos ont été centrés à 90°")
-            continue
-
-        if cmd == "test":
-            test_servo(SERVO_TEST)
-            continue
-
-        parts = cmd.split()
-        if len(parts) != 2:
-            print("Format invalide. Exemple : 1 120")
-            continue
-
-        try:
-            num_servo = int(parts[0])
-            angle = int(parts[1])
-            set_servo(num_servo, angle)
-            print(f"CH{num_servo} -> {clamp_angle(angle)}°")
-        except ValueError as e:
-            print(f"Erreur : {e}")
-        except Exception as e:
-            print(f"Erreur inattendue : {e}")
-
-def cleanup():
-    for ch in ALL_SERVOS:
-        try:
-            servos[ch].angle = None
-        except Exception:
-            pass
-    pca.deinit()
+    def cleanup(self):
+        self.releaseAll()
+        self.pca.deinit()
 
 if __name__ == "__main__":
+    controller = ServoController()
+
     try:
         print("Initialisation OK")
         print("Étape 1 : test sécurité sur le servo libre CH4")
-        test_servo(SERVO_TEST)
+        controller.testServo(controller.servo_test)
 
         print("\nÉtape 2 : centrage des servos")
-        centre_all()
+        controller.centerAll()
 
         print("\nÉtape 3 : commande manuelle")
-        manual_mode()
+        print("Servos disponibles : 0, 1, 2, 4")
+        print(f"Angles autorisés : {controller.angle_min} à {controller.angle_max}")
+        print("Commande : numero angle   (ex: 4 90)")
+        print("Commandes spéciales : center, test, test 4, quit\n")
+
+        while True:
+            cmd = input(">>> ").strip().lower()
+            parts = cmd.split()
+
+            if not parts:
+                continue
+
+            if parts[0] in ("quit", "exit", "q"):
+                break
+
+            if parts[0] == "center":
+                controller.centerAll()
+                print("Tous les servos ont été centrés à 90°")
+                continue
+
+            if parts[0] == "test":
+                if len(parts) == 1:
+                    controller.testServo(controller.servo_test)
+                elif len(parts) == 2:
+                    controller.testServo(int(parts[1]))
+                else:
+                    print("Format invalide. Exemple : test 4")
+                continue
+
+            if len(parts) != 2:
+                print("Format invalide. Exemple : 1 120")
+                continue
+
+            try:
+                channel = int(parts[0])
+                angle = int(parts[1])
+                safe_angle = controller.setAngle(channel, angle)
+                print(f"CH{channel} -> {safe_angle}°")
+            except ValueError as e:
+                print(f"Erreur : {e}")
+            except Exception as e:
+                print(f"Erreur inattendue : {e}")
 
     except KeyboardInterrupt:
         print("\nArrêt demandé par l'utilisateur")
     finally:
-        cleanup()
+        controller.cleanup()
         print("PCA9685 libéré proprement")
