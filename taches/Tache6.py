@@ -24,12 +24,12 @@ class Adeept_infrared:
         status_left = self.left.value
         return [status_left, status_middle, status_right]
 
-# Exécution de la fonction run pour afficher les états des capteurs IR réflectifs
+# Exécution de la fonction read pour afficher les états des capteurs IR réflectifs
 if __name__ == '__main__':
     infrared = Adeept_infrared()
     try:
       while 1:
-        print(infrared.run())
+        print(infrared.read())
         time.sleep(0.3)
     except KeyboardInterrupt:
         pass
