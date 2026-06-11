@@ -1,191 +1,259 @@
-from gpiozero import DistanceSensor
-from time import sleep, time
-from adafruit_motor import motor
-import busio
-from adafruit_pca9685 import PCA9685
-from board import SCL, SDA
-from gpiozero import PWMOutputDevice as PWM
-import threading
+#!/usr/bin/env python3
+# File name : Tache9_POO.py
+# Adeept PiCar-B2 - Robot obstacle en POO (réutilise Tache1, Tache4, Tache5)
+
 import sys
+import threading
+from time import sleep, time
 
-# Configuration Moteur
-MOTOR_M1_IN1 = 9       # Pôle positif M1
-MOTOR_M1_IN2 = 8       # Pôle négatif M1
+# Import des classes des autres tâches
+from Tache1 import Adeept_LED_Control
+from Tache4 import AdeeptMotorController
+from Tache5 import AdeeptUltra
 
-DIR_FORWARD  =  1
-DIR_BACKWARD = -1
 
-# Configuration Phares (LEDs RGB)
-Left_R  = 19
-Left_G  = 0
-Left_B  = 13
-Right_R = 1
-Right_G = 5
-Right_B = 6
+# ══════════════════════════════════════════════
+#  CLASSE PRINCIPALE DU ROBOT
+# ══════════════════════════════════════════════
 
-# Configuration Capteur Ultrason
-Tr = 23
-Ec = 24
-sensor = DistanceSensor(echo=Ec, trigger=Tr, max_distance=2)
+class AdeeptRobot:
+    """
+    Orchestre les sous-systèmes :
+      - AdeeptMotorController  (Tache4) → moteur DC + servo direction
+      - Adeept_LED_Control     (Tache1) → LEDs RGB + LEDs simples
+      - AdeeptUltra            (Tache5) → capteur ultrason
 
-# Initialisation I2C et PCA9685
-i2c = busio.I2C(SCL, SDA)
-pca = PCA9685(i2c, address=0x5f)
-pca.frequency = 50
-motor1 = motor.DCMotor(pca.channels[MOTOR_M1_IN1], pca.channels[MOTOR_M1_IN2])
-motor1.decay_mode = motor.SLOW_DECAY
+    États possibles :
+      STOP   → robot à l'arrêt
+      MOVE   → robot en marche
+      HAZARD → obstacle détecté, feux de détresse actifs
+    """
 
-# Variables globales pour le contrôle de l'état
-current_speed = 0       # Vitesse actuelle (0 à 100)
-robot_state = "STOP"    # États possibles : "STOP", "MOVE", "HAZARD"
-command_input = ""      # Stocke le dernier caractère saisi
-running = True          # Contrôle de la boucle principale
+    OBSTACLE_DIST  = 20.0   # cm — seuil d'arrêt d'urgence
+    CRUISE_SPEED   = 40     # % vitesse de croisière
+    ACCEL_TIME     = 1.5    # s — durée rampe accélération
+    DECEL_TIME     = 0.5    # s — durée rampe décélération urgence
+    HAZARD_PERIOD  = 0.25   # s — période clignotement feux de détresse
+    LOOP_DELAY     = 0.05   # s — délai boucle principale
 
-L_R = L_G = L_B = None
-R_R = R_G = R_B = None
+    def __init__(self):
+        print("[SYS] Initialisation des sous-systèmes...")
 
-def checkdist():
-    return (sensor.distance) * 100
+        # Instanciation des sous-systèmes
+        self.motor = AdeeptMotorController()
+        self.leds  = Adeept_LED_Control()
+        self.ultra = AdeeptUltra()
 
-def map_val(x, in_min, in_max, out_min, out_max):
-    return (x - in_min) / (in_max - in_min) * (out_max - out_min) + out_min
+        # Setup LEDs (PWM + LED simples)
+        self.leds.setup()
 
-def Motor(direction, speed_pct):
-    global current_speed
-    speed_pct = max(0, min(100, speed_pct))
-    current_speed = speed_pct
-    throttle = map_val(speed_pct, 0, 100, 0.0, 1.0)
-    motor1.throttle = throttle * direction
+        # État interne
+        self._state         = "STOP"
+        self._running       = True
+        self._command       = ""
+        self._light_state   = False
+        self._last_toggle   = time()
 
-def motorStop():
-    global current_speed
-    motor1.throttle = 0
-    current_speed = 0
-    print("[MOTEUR] Arrêt immédiat")
+        # Mutex pour protéger _command entre threads
+        self._cmd_lock = threading.Lock()
 
-def set_lights(r, g, b, r2, g2, b2):
-    L_R.value = r; L_G.value = g; L_B.value = b
-    R_R.value = r2; R_G.value = g2; R_B.value = b2
+        print("[SYS] Initialisation terminée. Prêt.")
+        print("[SYS] Commandes : 'M' → démarrer | 'A' ou 'a' → arrêter | 'Q' → quitter")
 
-def setup():
-    global L_R, L_G, L_B, R_R, R_G, R_B
-    L_R = PWM(pin=Left_R,  initial_value=0.0, frequency=2000)
-    L_G = PWM(pin=Left_G,  initial_value=0.0, frequency=2000)
-    L_B = PWM(pin=Left_B,  initial_value=0.0, frequency=2000)
-    R_R = PWM(pin=Right_R, initial_value=0.0, frequency=2000)
-    R_G = PWM(pin=Right_G, initial_value=0.0, frequency=2000)
-    R_B = PWM(pin=Right_B, initial_value=0.0, frequency=2000)
-    print("Initialisation terminée. Prêt.")
 
-def destroy():
-    global running
-    running = False
-    motorStop()
-    if L_R:
-        set_lights(0, 0, 0, 0, 0, 0)
-        L_R.close(); L_G.close(); L_B.close()
-        R_R.close(); R_G.close(); R_B.close()
-    print("GPIO libérés.")
+    @property
+    def state(self):
+        return self._state
 
-# --- Fonctions de mouvement avec pentes ---
+    @state.setter
+    def state(self, new_state):
+        print(f"[ÉTAT] {self._state} → {new_state}")
+        self._state = new_state
 
-def accelerate(target_speed=50, duration=1.5):
-    """Augmente progressivement la vitesse jusqu'à target_speed"""
-    global current_speed
-    print(f"[MOTEUR] Accélération vers {target_speed}%...")
-    steps = 10
-    sleep_time = duration / steps
-    increment = (target_speed - current_speed) / steps
-    
-    for _ in range(steps):
-        if robot_state != "MOVE":  # Interruption si un arrêt est demandé pendant la pente
-            break
-        next_speed = current_speed + increment
-        Motor(DIR_FORWARD, next_speed)
-        sleep(sleep_time)
 
-def decelerate(duration=1.0):
-    """Diminue progressivement la vitesse jusqu'à l'arrêt"""
-    global current_speed
-    print("[MOTEUR] Décélération...")
-    steps = 10
-    sleep_time = duration / steps
-    decrement = current_speed / steps
-    
-    for _ in range(steps):
-        next_speed = max(0, current_speed - decrement)
-        Motor(DIR_FORWARD, next_speed)
-        sleep(sleep_time)
-    motorStop()
+    def _accelerate(self):
+        """Rampe d'accélération progressive. Interruptible."""
+        print(f"[MOTEUR] Accélération → {self.CRUISE_SPEED}% en {self.ACCEL_TIME}s")
+        self.motor.MotorRamp(
+            self.motor.DIR_FORWARD,
+            self.CRUISE_SPEED,
+            ramp_time=self.ACCEL_TIME
+        )
 
-# --- Lecture Clavier Non-Bloquante ---
+    def _decelerate_emergency(self):
+        """Décélération rapide d'urgence."""
+        print("[MOTEUR] Décélération d'urgence...")
+        self.motor.MotorRamp(
+            self.motor.DIR_FORWARD,
+            0,
+            ramp_time=self.DECEL_TIME,
+            start_speed=self.CRUISE_SPEED
+        )
+        self.motor.motorStop()
 
-def read_keyboard():
-    global command_input, running
-    while running:
-        # Lecture simplifiée dans la console (Appuyer sur Entrée après la lettre)
-        char = sys.stdin.readline().strip()
-        if char:
-            command_input = char
+    def _startMove(self):
+        """Démarre le robot : éteint les feux de détresse, accélère."""
+        self._stopHazard()
+        self.leds.setAllRGBColor(255, 255, 255)   # Phares blancs
+        self.state = "MOVE"
+        t = threading.Thread(target=self._accelerate, daemon=True)
+        t.start()
 
-# --- Boucle Principale ---
+    def _stopMove(self):
+        """Arrêt manuel avec décélération."""
+        self.state = "STOP"
+        self.motor.MotorRamp(
+            self.motor.DIR_FORWARD,
+            0,
+            ramp_time=1.0,
+            start_speed=self.CRUISE_SPEED
+        )
+        self.motor.motorStop()
+        self.leds.all_off()
+
+    def _emergencyStop(self, distance):
+        """Arrêt d'urgence sur obstacle détecté."""
+        print(f"[OBSTACLE] Détecté à {distance:.1f} cm ! Arrêt d'urgence.")
+        self.state = "HAZARD"
+        self._decelerate_emergency()
+        self._startHazard()
+
+    def _startHazard(self):
+        """Active le mode feux de détresse (clignotement orange)."""
+        print("[DÉTRESSE] Feux de détresse ACTIVÉS")
+        self._light_state = False
+        self._last_toggle = time()
+
+    def _stopHazard(self):
+        """Désactive les feux de détresse."""
+        if self._state == "HAZARD":
+            print("[DÉTRESSE] Feux de détresse ÉTEINTS")
+        self.leds.all_off()
+
+    def _updateHazardLights(self):
+        """
+        À appeler à chaque tour de boucle quand state == HAZARD.
+        Fait clignoter toutes les LEDs en orange à HAZARD_PERIOD.
+        """
+        now = time()
+        if now - self._last_toggle >= self.HAZARD_PERIOD:
+            self._light_state  = not self._light_state
+            self._last_toggle  = now
+
+            if self._light_state:
+                # Orange sur LEDs RGB
+                self.leds.setAllRGBColor(255, 80, 0)
+                # LEDs simples allumées
+                self.leds.set_led(1, True)
+                self.leds.set_led(2, True)
+                self.leds.set_led(3, True)
+            else:
+                self.leds.all_off()
+
+    def _readKeyboard(self):
+        """Thread : lit les commandes clavier sans bloquer la boucle principale."""
+        while self._running:
+            try:
+                char = sys.stdin.readline().strip()
+                if char:
+                    with self._cmd_lock:
+                        self._command = char
+            except Exception:
+                pass
+
+    def _processCommand(self):
+        """Traite la dernière commande reçue."""
+        with self._cmd_lock:
+            cmd = self._command
+            self._command = ""
+
+        if not cmd:
+            return
+
+        if cmd == 'M':
+            if self._state in ("STOP", "HAZARD"):
+                print("[ORDRE] Départ demandé.")
+                self._startMove()
+            else:
+                print("[INFO] Robot déjà en marche.")
+
+        elif cmd in ('A', 'a'):
+            if self._state == "MOVE":
+                print("[ORDRE] Arrêt manuel demandé.")
+                self._stopMove()
+            else:
+                print("[INFO] Robot déjà arrêté.")
+
+        elif cmd in ('Q', 'q'):
+            print("[ORDRE] Quitter.")
+            self._running = False
+
+        else:
+            print(f"[INFO] Commande inconnue : '{cmd}'")
+
+
+    def run(self):
+        """Boucle principale du robot."""
+
+        # Démarrage thread clavier
+        kbd_thread = threading.Thread(target=self._readKeyboard, daemon=True)
+        kbd_thread.start()
+
+        try:
+            while self._running:
+
+                # 1. Traitement commande clavier
+                self._processCommand()
+
+                # 2. Mesure distance
+                distance = self.ultra.checkdist()
+
+                # 3. Détection obstacle si en mouvement
+                if self._state == "MOVE" and distance < self.OBSTACLE_DIST:
+                    self._emergencyStop(distance)
+
+                # 4. Clignotement feux de détresse si HAZARD
+                elif self._state == "HAZARD":
+                    self._updateHazardLights()
+                    # Affichage distance pour info
+                    print(f"[SONAR] Distance : {distance:.1f} cm", end='\r')
+
+                sleep(self.LOOP_DELAY)
+
+        except KeyboardInterrupt:
+            print("\n[SYS] Interruption clavier.")
+        finally:
+            self.destroy()
+
+
+    def destroy(self):
+        """Libère tous les sous-systèmes proprement."""
+        self._running = False
+        print("[SYS] Arrêt en cours...")
+
+        # Arrêt moteur
+        self.motor.motorStop()
+
+        # Extinction LEDs
+        self.leds.all_off()
+        self.leds.destroy()
+
+        # Libération PCA9685 moteur
+        self.motor.pca.deinit()
+
+        # Libération ultrason
+        self.ultra.destroy()
+
+        print("[SYS] Tous les GPIO libérés.")
+
 
 if __name__ == "__main__":
-    setup()
-    
-    # Lancement du thread d'écoute clavier
-    input_thread = threading.Thread(target=read_keyboard)
-    input_thread.daemon = True
-    input_thread.start()
-    
-    last_light_toggle = time()
-    light_state = False
-    
-    print("Instructions : 'M' pour démarrer, 'A' ou 'a' pour stopper.")
-    
+    robot = None
     try:
-        while running:
-            distance = checkdist()
-            
-            # 1. Gestion des commandes clavier reçues
-            if command_input != "":
-                cmd = command_input
-                command_input = "" # Réinitialise l'ordre
-                
-                if cmd == 'M':
-                    if robot_state == "STOP" or robot_state == "HAZARD":
-                        print("\n[ORDRE] Départ demandé.")
-                        set_lights(0, 0, 0, 0, 0, 0)
-                        robot_state = "MOVE"
-                        accelerate(target_speed=40, duration=2.0) # Vitesse réduite pour tests
-                
-                elif cmd in ['A', 'a']:
-                    print("\n[ORDRE] Arrêt Manuel Immédiat.")
-                    robot_state = "STOP"
-                    motorStop()
-                    set_lights(0, 0, 0, 0, 0, 0)
-
-            # 2. Sécurité : Détection d'obstacle (< 20 cm)
-            if robot_state == "MOVE" and distance < 20:
-                print(f"\n[ATTENTION] Obstacle détecté à {distance:.1f} cm !")
-                robot_state = "HAZARD"
-                decelerate(duration=0.5) # Décélération rapide d'urgence
-            
-            # 3. Gestion des Feux de détresse (Mode HAZARD)
-            if robot_state == "HAZARD":
-                if time() - last_light_toggle > 0.25:
-                    light_state = not light_state
-                    last_light_toggle = time()
-                    if light_state:
-                        set_lights(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
-                    else:
-                        set_lights(0, 0, 0, 0, 0, 0)
-
-            sleep(0.05) # Petite pause pour soulager le processeur
-
-    except KeyboardInterrupt:
-        print("\nFin du programme par Ctrl+C.")
+        robot = AdeeptRobot()
+        robot.run()
     except Exception as e:
-        print(f"Erreur : {e}")
+        print(f"[ERREUR] {e}")
     finally:
-        destroy()
+        if robot:
+            robot.destroy()
