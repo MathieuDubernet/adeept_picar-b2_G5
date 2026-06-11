@@ -1,6 +1,5 @@
 from gpiozero import PWMOutputDevice as PWM
 from gpiozero import LED
-import time
 
 class Adeept_LED_Control:
 

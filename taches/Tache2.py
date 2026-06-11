@@ -1,6 +1,7 @@
 import spidev
 import numpy
 from numpy import sin, cos, pi
+
 class Adeept_SPI_LedPixel:
 
     # Définition d'un dictionnaire de couleurs pour les LED, associant les lettres R, G, B et N à leurs valeurs RGB correspondantes.
@@ -262,7 +263,7 @@ class Adeept_SPI_LedPixel:
     def set_one_led(self, choosenLed, choosenColor, brightness=255):
         
         if 1 <= choosenLed <= 14 and choosenColor in self.colors:
-            scaled_colors = [round(c * brightness / 255) for c in self.colors.get(choosenColor)]
+            scaled_colors = [round(c * brightness / 255) for c in self.colors[choosenColor]]
             self.set_led_rgb(choosenLed - 1, scaled_colors)
             
         else:
