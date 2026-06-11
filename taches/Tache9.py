@@ -53,6 +53,7 @@ class AdeeptRobot:
         self._command       = ""
         self._light_state   = False
         self._last_toggle   = time()
+        self._destroyed = False
 
         # Mutex pour protéger _command entre threads
         self._cmd_lock = threading.Lock()
@@ -228,22 +229,16 @@ class AdeeptRobot:
 
     def destroy(self):
         """Libère tous les sous-systèmes proprement."""
+        if self._destroyed:            
+            return                     
+        self._destroyed = True         
+
         self._running = False
         print("[SYS] Arrêt en cours...")
-
-        # Arrêt moteur
         self.motor.motorStop()
-
-        # Extinction LEDs
         self.leds.all_off()
         self.leds.destroy()
-
-        # Libération PCA9685 moteur
         self.motor.pca.deinit()
-
-        # Libération ultrason
-        self.ultra.destroy()
-
         print("[SYS] Tous les GPIO libérés.")
 
 

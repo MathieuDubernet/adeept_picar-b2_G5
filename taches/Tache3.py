@@ -7,7 +7,7 @@ from adafruit_motor import servo
 
 
 class ServoController(object):
-    def __init__(self):
+    def __init__(self, pca=None):
         self.address = 0x5F
         self.frequency = 50
         self.angle_min = 10
@@ -17,7 +17,10 @@ class ServoController(object):
         self.all_servos = [0, 1, 2, 4]
 
         self.i2c = busio.I2C(SCL, SDA)
-        self.pca = PCA9685(self.i2c, address=self.address)
+        if pca is None:
+            self.pca = PCA9685(self.i2c, address=self.address)
+        else:
+            self.pca = pca
         self.pca.frequency = self.frequency
 
         self.servos = {
@@ -67,7 +70,8 @@ class ServoController(object):
 
     def cleanup(self):
         self.releaseAll()
-        self.pca.deinit()
+        if self._owns_pca:
+            self.pca.deinit()
 
 if __name__ == "__main__":
     controller = ServoController()

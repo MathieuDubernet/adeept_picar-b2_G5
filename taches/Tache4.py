@@ -22,15 +22,18 @@ class AdeeptMotorController:
     SERVO_LEFT    = SERVO_CENTER - 30  # Limite gauche (à ajuster)
     SERVO_RIGHT   = SERVO_CENTER + 30  # Limite droite (à ajuster)
 
-    def __init__(self):
-        self.i2c       = busio.I2C(SCL, SDA)
-        self.pca       = PCA9685(self.i2c, address=0x5f)
-        self.pca.frequency = 50
+    def __init__(self, pca=None):
+        self._owns_pca = (pca is None)
+        if pca is None:
+            self.i2c = busio.I2C(SCL, SDA)
+            self.pca = PCA9685(self.i2c, address=0x5f)
+            self.pca.frequency = 50
+        else:
+            self.pca = pca
 
         self.motor1 = motor.DCMotor(self.pca.channels[self.MOTOR_M1_IN1],
                                    self.pca.channels[self.MOTOR_M1_IN2])
         self.motor1.decay_mode = motor.SLOW_DECAY
-
 
     def map_val(self, x, in_min, in_max, out_min, out_max):
         return (x - in_min) / (in_max - in_min) * (out_max - out_min) + out_min
@@ -94,7 +97,8 @@ class AdeeptMotorController:
     def destroy(self):
         self.motorStop()
         self.setDirection(self.SERVO_CENTER)
-        self.pca.deinit()
+        if self._owns_pca:
+            self.pca.deinit()
         print("[SYS] GPIO libérés.")
 
 
@@ -162,7 +166,6 @@ def main(AdeeptMotor):
                 ramp  = float(input("Durée rampe (secondes) : ").strip())
                 AdeeptMotor.MotorRamp(sens, spd, ramp_time=ramp)
 
-            # ─── Direction ───
             elif code == 8:
                 AdeeptMotor.setDirection(AdeeptMotor.SERVO_CENTER)
 
