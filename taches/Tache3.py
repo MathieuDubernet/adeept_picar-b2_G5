@@ -17,6 +17,7 @@ class ServoController(object):
         self.all_servos = [0, 1, 2, 4]
 
         self.i2c = busio.I2C(SCL, SDA)
+        self._owns_pca = (pca is None)
         if pca is None:
             self.pca = PCA9685(self.i2c, address=self.address)
         else:

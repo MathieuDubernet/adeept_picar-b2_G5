@@ -189,10 +189,12 @@ def main(AdeeptMotor):
 
 
 if __name__ == "__main__":
+    AdeeptMotor = None  
     try:
         AdeeptMotor = AdeeptMotorController()
         main(AdeeptMotor)
     except Exception as e:
         print(f"Erreur : {e}")
     finally:
-        AdeeptMotor.destroy()
+        if AdeeptMotor is not None:
+            AdeeptMotor.destroy()
