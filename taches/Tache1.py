@@ -100,14 +100,6 @@ class Adeept_LED_Control:
         for i in range(1, 10):
             self.set_led(i, False)
 
-
-    def loop(self):
-        while True:
-            for col in self.colors:
-                self.setAllColor(col)
-                time.sleep(0.5)
-
-
     def destroy(self):
         self.all_off()
         self.L_R.close(); self.L_G.close(); self.L_B.close()
