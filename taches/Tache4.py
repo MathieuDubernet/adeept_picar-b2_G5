@@ -1,3 +1,4 @@
+import threading
 import time
 from board import SCL, SDA
 import busio
@@ -39,7 +40,7 @@ class AdeeptMotorController:
             self.pca.frequency = 50
         else:
             self.pca = pca
-
+        self._stop_ramp = threading.Event()
         self.motor1 = motor.DCMotor(self.pca.channels[self.MOTOR_M1_IN1],
                                    self.pca.channels[self.MOTOR_M1_IN2])
         self.motor1.decay_mode = motor.SLOW_DECAY
@@ -125,6 +126,7 @@ class AdeeptMotorController:
         print(f"[RAMPE] {label} | {start_speed}% → {target_speed_pct}% en {ramp_time}s")
 
         for i in range(steps + 1):
+            if self._stop_ramp.is_set(): break
             current_speed = start_speed + (target_speed_pct - start_speed) * i / steps
             self.MotorSetSilent(direction, current_speed)
             time.sleep(step_delay)

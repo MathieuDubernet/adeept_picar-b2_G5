@@ -1,20 +1,16 @@
-#!/usr/bin/env python3
-# File name : Tache9_POO.py
-# Adeept PiCar-B2 - Robot obstacle en POO (réutilise Tache1, Tache4, Tache5)
-
 import sys
 import threading
 from time import sleep, time
+from board import SCL, SDA
+import busio
+from adafruit_pca9685 import PCA9685
 
 # Import des classes des autres tâches
 from Tache1 import Adeept_LED_Control
+from Tache2 import Adeept_SPI_LedPixel
 from Tache4 import AdeeptMotorController
 from Tache5 import AdeeptUltra
 
-
-# ══════════════════════════════════════════════
-#  CLASSE PRINCIPALE DU ROBOT
-# ══════════════════════════════════════════════
 
 class AdeeptRobot:
     """
@@ -22,6 +18,7 @@ class AdeeptRobot:
       - AdeeptMotorController  (Tache4) → moteur DC + servo direction
       - Adeept_LED_Control     (Tache1) → LEDs RGB + LEDs simples
       - AdeeptUltra            (Tache5) → capteur ultrason
+      - Adeept_SPI_LedPixel     (Tache2) → bandeau LED SPI
 
     États possibles :
       STOP   → robot à l'arrêt
@@ -32,16 +29,18 @@ class AdeeptRobot:
     OBSTACLE_DIST  = 20.0   # cm — seuil d'arrêt d'urgence
     CRUISE_SPEED   = 40     # % vitesse de croisière
     ACCEL_TIME     = 1.5    # s — durée rampe accélération
-    DECEL_TIME     = 0.5    # s — durée rampe décélération urgence
     HAZARD_PERIOD  = 0.25   # s — période clignotement feux de détresse
     LOOP_DELAY     = 0.05   # s — délai boucle principale
 
     def __init__(self):
-        print("[SYS] Initialisation des sous-systèmes...")
-
+        print("Initialisation des sous-systèmes...")
+        self.i2c = busio.I2C(SCL, SDA)
+        self.pca = PCA9685(self.i2c, address=0x5f)
+        self.pca.frequency = 50
         # Instanciation des sous-systèmes
-        self.motor = AdeeptMotorController()
+        self.motor = AdeeptMotorController(pca=self.pca)
         self.leds  = Adeept_LED_Control()
+        self.SPIleds = Adeept_SPI_LedPixel()
         self.ultra = AdeeptUltra()
 
         # Setup LEDs (PWM + LED simples)
@@ -54,12 +53,12 @@ class AdeeptRobot:
         self._light_state   = False
         self._last_toggle   = time()
         self._destroyed = False
+        self._accel_thread  = None   # thread de la rampe d'accélération en cours
 
         # Mutex pour protéger _command entre threads
         self._cmd_lock = threading.Lock()
 
-        print("[SYS] Initialisation terminée. Prêt.")
-        print("[SYS] Commandes : 'M' → démarrer | 'A' ou 'a' → arrêter | 'Q' → quitter")
+        print("Commandes : 'M' → démarrer | 'A' ou 'a' → arrêter | 'Q' → quitter")
 
 
     @property
@@ -81,28 +80,32 @@ class AdeeptRobot:
             ramp_time=self.ACCEL_TIME
         )
 
-    def _decelerate_emergency(self):
-        """Décélération rapide d'urgence."""
-        print("[MOTEUR] Décélération d'urgence...")
-        self.motor.MotorRamp(
-            self.motor.DIR_FORWARD,
-            0,
-            ramp_time=self.DECEL_TIME,
-            start_speed=self.CRUISE_SPEED
-        )
-        self.motor.motorStop()
+    def _stopAccel(self):
+        """
+        Interrompt proprement la rampe d'accélération :
+        lève le drapeau d'arrêt puis attend que le thread sorte réellement
+        (join). Garantit qu'aucun thread ne touche encore au moteur ensuite.
+        """
+        self.motor._stop_ramp.set()
+        if self._accel_thread is not None:
+            self._accel_thread.join()
+            self._accel_thread = None
 
     def _startMove(self):
         """Démarre le robot : éteint les feux de détresse, accélère."""
         self._stopHazard()
+        self.motor._stop_ramp.clear()
         self.leds.setAllRGBColor(255, 255, 255)   # Phares blancs
+        self.SPIleds.set_all_led_rgb([255, 255, 255])
         self.state = "MOVE"
-        t = threading.Thread(target=self._accelerate, daemon=True)
-        t.start()
+        self._accel_thread = threading.Thread(target=self._accelerate, daemon=True)
+        self._accel_thread.start()
 
     def _stopMove(self):
-        """Arrêt manuel avec décélération."""
+        """Arrêt manuel avec rampe de décélération."""
         self.state = "STOP"
+        self._stopAccel()                 # stoppe l'accélération en cours (anti-concurrence)
+        self.motor._stop_ramp.clear()     # ré-autorise la rampe (de décélération)
         self.motor.MotorRamp(
             self.motor.DIR_FORWARD,
             0,
@@ -111,12 +114,14 @@ class AdeeptRobot:
         )
         self.motor.motorStop()
         self.leds.all_off()
+        self.SPIleds.set_all_led_rgb([0, 0, 0])
 
     def _emergencyStop(self, distance):
-        """Arrêt d'urgence sur obstacle détecté."""
+        """Arrêt d'urgence sur obstacle détecté : coupe le moteur immédiatement."""
         print(f"[OBSTACLE] Détecté à {distance:.1f} cm ! Arrêt d'urgence.")
+        self._stopAccel()             # interrompt la rampe et attend la fin du thread
         self.state = "HAZARD"
-        self._decelerate_emergency()
+        self.motor.motorStop()        # arrêt net, plus aucun thread concurrent
         self._startHazard()
 
     def _startHazard(self):
@@ -130,6 +135,7 @@ class AdeeptRobot:
         if self._state == "HAZARD":
             print("[DÉTRESSE] Feux de détresse ÉTEINTS")
         self.leds.all_off()
+        self.SPIleds.set_all_led_rgb([0, 0, 0])
 
     def _updateHazardLights(self):
         """
@@ -148,8 +154,10 @@ class AdeeptRobot:
                 self.leds.set_led(1, True)
                 self.leds.set_led(2, True)
                 self.leds.set_led(3, True)
+                self.SPIleds.set_all_led_rgb([255, 80, 0])
             else:
                 self.leds.all_off()
+                self.SPIleds.set_all_led_rgb([0, 0, 0])
 
     def _readKeyboard(self):
         """Thread : lit les commandes clavier sans bloquer la boucle principale."""
@@ -234,12 +242,13 @@ class AdeeptRobot:
         self._destroyed = True         
 
         self._running = False
-        print("[SYS] Arrêt en cours...")
+        print("Arrêt en cours...")
         self.motor.motorStop()
         self.leds.all_off()
+        self.SPIleds.led_close()
         self.leds.destroy()
-        self.motor.pca.deinit()
-        print("[SYS] Tous les GPIO libérés.")
+        self.pca.deinit()
+        print("Tous les GPIO libérés.")
 
 
 if __name__ == "__main__":
