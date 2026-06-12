@@ -4,6 +4,11 @@ from gpiozero import LED
 class Adeept_LED_Control:
 
     def __init__(self):
+        """
+        Initialise les numéros de broches GPIO du contrôleur de LEDs :
+        les 6 canaux RGB PWM (gauche/droite × R/G/B) et les 3 LEDs simples.
+        Les objets matériels ne sont pas encore créés ici (voir setup()).
+        """
         self.Left_R  = 19
         self.Left_G  = 0
         self.Left_B  = 13
@@ -17,9 +22,13 @@ class Adeept_LED_Control:
     colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00,
             0xFF00FF, 0x00FFFF, 0x6F00D2, 0xFF5809]
 
-    # LEDs RGB PWM (initial_value=1.0 = éteint car logique inversée)
     def setup(self):
-        
+        """
+        Construit les objets matériels à partir des broches définies dans
+        __init__ : les 6 sorties RGB PWM (initial_value=1.0 = éteint, car
+        la logique est inversée) à 2000 Hz, puis les 3 LEDs simples ON/OFF.
+        À appeler une fois avant toute commande de LED.
+        """
         self.L_R = PWM(pin=self.Left_R,  initial_value=1.0, frequency=2000)
         self.L_G = PWM(pin=self.Left_G,  initial_value=1.0, frequency=2000)
         self.L_B = PWM(pin=self.Left_B,  initial_value=1.0, frequency=2000)
@@ -34,12 +43,30 @@ class Adeept_LED_Control:
 
 
     def map_val(self, x, in_min, in_max, out_min, out_max):
+        """
+        Convertit une valeur d'un intervalle source vers un intervalle cible
+        (interpolation linéaire), par ex. de [0-255] vers [0.0-1.0].
+
+        Paramètres:
+        - x: valeur à convertir
+        - in_min, in_max: bornes de l'intervalle source
+        - out_min, out_max: bornes de l'intervalle cible
+        """
         return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 
 
     def setAllRGBColor(self, R, G, B):
-        """Applique une couleur RGB (0-255) aux 6 LEDs RGB."""
+        """
+        Applique une même couleur aux 6 LEDs RGB. Les composantes (0-255)
+        sont converties en valeurs PWM (0.0-1.0) puis inversées (1.0 - valeur)
+        car les LEDs sont câblées en logique inversée (0.0 = pleine intensité).
+
+        Paramètres:
+        - R: composante rouge (0-255)
+        - G: composante verte (0-255)
+        - B: composante bleue (0-255)
+        """
         R_val = self.map_val(R, 0, 255, 0, 1.0)
         G_val = self.map_val(G, 0, 255, 0, 1.0)
         B_val = self.map_val(B, 0, 255, 0, 1.0)
@@ -100,6 +127,10 @@ class Adeept_LED_Control:
             self.set_led(i, False)
 
     def destroy(self):
+        """
+        Arrêt propre : éteint toutes les LEDs puis libère (close) les 6 canaux
+        RGB PWM et les 3 LEDs simples afin de relâcher les broches GPIO.
+        """
         self.all_off()
         self.L_R.close(); self.L_G.close(); self.L_B.close()
         self.R_R.close(); self.R_G.close(); self.R_B.close()
@@ -109,14 +140,11 @@ class Adeept_LED_Control:
 
 def main(adeept_led_control):
 
-    print("╔══════════════════════════════════════╗")
-    print("║     Contrôle manuel des LEDs         ║")
-    print("╠══════════════════════════════════════╣")
-    print("║  11-19 → Allumer LED 1 à 9           ║")
-    print("║  21-29 → Éteindre LED 1 à 9          ║")
-    print("║  00    → Tout éteindre               ║")
-    print("║  99    → Quitter                     ║")
-    print("╚══════════════════════════════════════╝")
+    print("Contrôle manuel des LEDs :")
+    print(" 11-19 => Allumer LED 1 à 9")
+    print(" 21-29 => Éteindre LED 1 à 9")
+    print(" 00    => Tout éteindre")
+    print(" 99    => Quitter")
 
     while True:
         try:
