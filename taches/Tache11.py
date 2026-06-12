@@ -1,4 +1,5 @@
 
+
 import sys
 import threading
 from time import sleep, time
@@ -67,6 +68,7 @@ class LineFollowerRobot:
         self._light_state  = False
         self._last_toggle  = time()
         self._last_dir     = "CENTER"   # dernier cap connu (mémoire de ligne)
+        self._lost_since   = None       # timestamp du début de perte de ligne
         self._accel_thread = None
         self._destroyed    = False
 
@@ -151,43 +153,99 @@ class LineFollowerRobot:
                 self.spileds.set_all_led_rgb([0, 0, 0])
 
     # ── Suivi de ligne ────────────────────────────────────────────────────────
+    #
+    # Tableau complet des 8 combinaisons IR (0=noir, 1=blanc) :
+    #
+    #  G  M  D   Interprétation              Action
+    #  1  0  1   Ligne centrée               Tout droit
+    #  0  0  1   Ligne déportée à gauche     Braquer gauche (fort)
+    #  1  0  0   Ligne déportée à droite     Braquer droite (fort)
+    #  0  0  0   Virage serré / large ligne  Continuer dernier cap
+    #  0  1  0   Ligne sous G+M              Léger gauche
+    #  1  1  0   Ligne sous M+D              Léger droite
+    #  1  1  1   Plus de ligne visible       Continuer dernier cap + compteur
+    #  0  1  1   (idem 0,1,0 inversé)        Léger gauche
+    #
+    # Un compteur _lost_count compte les cycles consécutifs sans ligne.
+    # Au-delà de LOST_TIMEOUT secondes → arrêt (vraie fin de parcours).
+
+    LOST_TIMEOUT = 2.0   # secondes sans voir la ligne avant arrêt définitif
+
     def _follow_line(self, ir_values: list):
         """
         Ajuste la direction et maintient la vitesse selon les capteurs IR.
         ir_values : [gauche, milieu, droite]  (0 = noir, 1 = blanc)
         """
         left, mid, right = ir_values
+        line_seen = not (left == 1 and mid == 1 and right == 1)
 
-        # Tout droit : ligne centrée
-        if mid == 0 and left == 1 and right == 1:
-            self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_CENTER)
-            self._last_dir = "CENTER"
+        if line_seen:
+            # ── Ligne visible : remettre le compteur à zéro ───────────────
+            self._lost_since = None
 
-        # Ligne à droite → braquer à droite
-        elif right == 0 and left == 1:
-            self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_RIGHT)
-            self._last_dir = "RIGHT"
+            if left == 1 and mid == 0 and right == 1:
+                # Ligne parfaitement centrée → tout droit
+                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_CENTER)
+                self._last_dir = "CENTER"
 
-        # Ligne à gauche → braquer à gauche
-        elif left == 0 and right == 1:
-            self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_LEFT)
-            self._last_dir = "LEFT"
-
-        # Ligne perdue (virage serré ou capteurs tous sur noir) → continuer dernier cap
-        elif left == 0 and mid == 0 and right == 0:
-            # Maintenir dernier cap connu
-            if self._last_dir == "RIGHT":
-                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_RIGHT)
-            elif self._last_dir == "LEFT":
+            elif left == 0 and mid == 0 and right == 1:
+                # Ligne à gauche → braquer gauche (fort)
                 self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_LEFT)
+                self._last_dir = "LEFT"
 
-        # Tous sur blanc = fin de parcours ou perte totale
-        elif left == 1 and mid == 1 and right == 1:
-            print("[LIGNE] Fin de parcours ou ligne perdue — arrêt.")
-            self._stop_move()
-            return
+            elif left == 1 and mid == 0 and right == 0:
+                # Ligne à droite → braquer droite (fort)
+                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_RIGHT)
+                self._last_dir = "RIGHT"
 
-        # Maintenir la vitesse de suivi (la rampe de démarrage a déjà lancé le moteur)
+            elif left == 0 and mid == 1 and right == 1:
+                # Ligne sous capteur gauche → léger gauche
+                angle = self.SERVO_CENTER - (self.SERVO_CENTER - self.SERVO_LEFT) // 2
+                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, angle)
+                self._last_dir = "LEFT"
+
+            elif left == 1 and mid == 1 and right == 0:
+                # Ligne sous capteur droit → léger droite
+                angle = self.SERVO_CENTER + (self.SERVO_RIGHT - self.SERVO_CENTER) // 2
+                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, angle)
+                self._last_dir = "RIGHT"
+
+            elif left == 0 and mid == 0 and right == 0:
+                # Virage serré / ligne très large → continuer dernier cap
+                if self._last_dir == "LEFT":
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_LEFT)
+                elif self._last_dir == "RIGHT":
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_RIGHT)
+                else:
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_CENTER)
+
+            elif left == 0 and mid == 1 and right == 0:
+                # Les deux côtés sur noir, milieu blanc → centrer
+                self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_CENTER)
+                self._last_dir = "CENTER"
+
+        else:
+            # ── Aucun capteur ne voit la ligne [1,1,1] ────────────────────
+            # Démarrer ou continuer le chrono de perte
+            if self._lost_since is None:
+                self._lost_since = time()
+
+            elapsed = time() - self._lost_since
+
+            if elapsed >= self.LOST_TIMEOUT:
+                print("\n[LIGNE] Ligne perdue trop longtemps — arrêt.")
+                self._stop_move()
+                return
+            else:
+                # Continuer sur le dernier cap connu en attendant de retrouver la ligne
+                if self._last_dir == "LEFT":
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_LEFT)
+                elif self._last_dir == "RIGHT":
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_RIGHT)
+                else:
+                    self.motor.set_angle(self.motor.SERVO_DIR_CHANNEL, self.SERVO_CENTER)
+
+        # Maintenir la vitesse de suivi
         self.motor.MotorSetSilent(self.motor.DIR_FORWARD, self.LINE_SPEED)
 
     # ── Clavier ───────────────────────────────────────────────────────────────
