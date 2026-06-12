@@ -38,14 +38,30 @@ class ServoController(object):
             return self.angle_max
         return angle
 
-    def setAngle(self, channel, angle):
+    def setAngle(self, channel, angle, step=2, delay=0.02):
         if channel not in self.servos:
             raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
-        safe_angle = self.clampAngle(angle)
-        self.servos[channel].angle = safe_angle
-        time.sleep(0.05)
-        return safe_angle
+        target = self.clampAngle(angle)
+        current = self.current_angles[channel]
+
+        if target == current:
+            return target
+
+        if target > current:
+            angle_range = range(current, target + 1, step)
+        else:
+            angle_range = range(current, target - 1, -step)
+
+        for a in angle_range:
+            safe_a = self.clampAngle(a)
+            self.servos[channel].angle = safe_a
+            self.current_angles[channel] = safe_a
+            time.sleep(delay)
+
+        self.current_angles[channel] = target
+        self.servos[channel].angle = target
+        return target
 
     def centerAll(self):
         for ch in self.all_servos:
