@@ -7,15 +7,18 @@ from adafruit_motor import servo
 
 class ServoController(object):
     def __init__(self, pca=None):
-        self.address = 0x5F
-        self.frequency = 50
-        self.angle_min = 10
-        self.angle_max = 170
-        self.servo_test = 15
+        # Configuration matérielle
+        self.address = 0x5F          # Adresse I2C du PCA9685
+        self.frequency = 50          # 50 Hz = fréquence standard pour les servos
+        self.angle_min = 10          # Limite basse pour éviter les butées mécaniques
+        self.angle_max = 170         # Limite haute
+        self.servo_test = 15         # Canal réservé aux tests (servo libre)
         self.servos_robot = [0, 1, 2]
         self.all_servos = [0, 1, 2, 15]
 
         self.i2c = busio.I2C(SCL, SDA)
+
+        # Si aucun PCA fourni, on en crée un (et on sera responsable de le libérer)
         self._owns_pca = (pca is None)
         if pca is None:
             self.pca = PCA9685(self.i2c, address=self.address)
@@ -23,6 +26,7 @@ class ServoController(object):
             self.pca = pca
         self.pca.frequency = self.frequency
 
+        # Initialisation des servos avec plage de pulse adaptée à un 180°
         self.servos = {
             0: servo.Servo(self.pca.channels[0], min_pulse=500, max_pulse=2400, actuation_range=180),
             1: servo.Servo(self.pca.channels[1], min_pulse=500, max_pulse=2400, actuation_range=180),
@@ -30,9 +34,11 @@ class ServoController(object):
             15: servo.Servo(self.pca.channels[15], min_pulse=500, max_pulse=2400, actuation_range=180),
         }
 
+        # Position initiale supposée à 90° (centre) pour tous les servos
         self.current_angles = {ch: 90 for ch in self.all_servos}
 
     def clampAngle(self, angle):
+        """Contraint l'angle dans la plage [angle_min, angle_max]."""
         angle = int(angle)
         if angle < self.angle_min:
             return self.angle_min
@@ -41,6 +47,10 @@ class ServoController(object):
         return angle
 
     def setAngle(self, channel, angle, step=20, delay=0.1):
+        """
+        Déplace un servo vers l'angle cible de façon progressive (pas à pas)
+        pour éviter les à-coups mécaniques.
+        """
         if channel not in self.servos:
             raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
@@ -50,6 +60,7 @@ class ServoController(object):
         if target == current:
             return target
 
+        # Déplacement progressif vers la cible
         if target > current:
             angle_range = range(current, target + 1, step)
         else:
@@ -61,15 +72,18 @@ class ServoController(object):
             self.current_angles[channel] = safe_a
             time.sleep(delay)
 
+        # Forcer la position finale exacte (le range peut ne pas l'atteindre pile)
         self.current_angles[channel] = target
         self.servos[channel].angle = target
         return target
 
     def centerAll(self):
+        """Remet tous les servos à 90° (position neutre)."""
         for ch in self.all_servos:
             self.setAngle(ch, 90)
 
     def testServo(self, channel):
+        """Séquence de test : fait bouger le servo sur quelques angles de référence."""
         if channel not in self.servos:
             raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
@@ -80,6 +94,7 @@ class ServoController(object):
             time.sleep(1)
 
     def releaseAll(self):
+        """Coupe le signal PWM de tous les servos (ils ne maintiennent plus leur position)."""
         for ch in self.all_servos:
             try:
                 self.servos[ch].angle = None
@@ -87,6 +102,7 @@ class ServoController(object):
                 pass
 
     def cleanup(self):
+        """Libère proprement les ressources : relâche les servos et désinitialise le PCA si on le possède."""
         self.releaseAll()
         if self._owns_pca:
             self.pca.deinit()
