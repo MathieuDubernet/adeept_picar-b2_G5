@@ -23,18 +23,17 @@ class AdeeptMotorController:
         Paramètres:
         - servo_controller: instance ServoController déjà initialisée
         """
-        self.i2c = busio.I2C(SCL, SDA)
-        self.pca = PCA9685(self.i2c, address=0x5F)
-        self.pca.frequency = 50
         self.servo_controller = servo_controller
-
-        self._stop_ramp = threading.Event()
+        self.pca = servo_controller.pca
+        self._owns_pca = False
 
         self.motor1 = motor.DCMotor(
             self.pca.channels[self.MOTOR_M1_IN1],
             self.pca.channels[self.MOTOR_M1_IN2]
         )
         self.motor1.decay_mode = motor.SLOW_DECAY
+
+        self._stop_ramp = threading.Event()
         
         self.direction_channel = 0
 

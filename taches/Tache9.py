@@ -8,6 +8,7 @@ from adafruit_pca9685 import PCA9685
 # Import des classes des autres tâches
 from Tache1 import Adeept_LED_Control
 from Tache2 import Adeept_SPI_LedPixel
+from Tache3 import ServoController
 from Tache4 import AdeeptMotorController
 from Tache5 import AdeeptUltra
 
@@ -34,11 +35,9 @@ class AdeeptRobot:
 
     def __init__(self):
         print("Initialisation des sous-systèmes...")
-        self.i2c = busio.I2C(SCL, SDA)
-        self.pca = PCA9685(self.i2c, address=0x5f)
-        self.pca.frequency = 50
         # Instanciation des sous-systèmes
-        self.motor = AdeeptMotorController(pca=self.pca)
+        self.servo_controller = ServoController()
+        self.motor = AdeeptMotorController(self.servo_controller)
         self.leds  = Adeept_LED_Control()
         self.SPIleds = Adeept_SPI_LedPixel()
         self.ultra = AdeeptUltra()
@@ -247,7 +246,7 @@ class AdeeptRobot:
         self.leds.all_off()
         self.SPIleds.led_close()
         self.leds.destroy()
-        self.pca.deinit()
+        self.servo_controller.cleanup()
         print("Tous les GPIO libérés.")
 
 
