@@ -137,19 +137,6 @@ class Adeept_SPI_LedPixel:
         """
         self.set_ledpixel(index, color[0], color[1], color[2])   
 
-    def set_led_color(self, index, r, g, b):
-        """
-        Définit la couleur d'une LED spécifique en fonction de son index et des valeurs RGB, puis met à jour l'affichage immédiatement. Utilise set_ledpixel et appelle show pour afficher les changements.
-        
-        Paramètres:
-        - index: Index de la LED
-        - r: Valeur rouge (0-255)
-        - g: Valeur verte (0-255)
-        - b: Valeur bleue (0-255)
-        """
-        self.set_ledpixel(index, r, g, b)
-        self.show() 
-
     def set_led_rgb(self, index, color):
         """
         Définit la couleur d'une LED spécifique en fonction de son index et d'une liste de valeurs RGB, puis met à jour l'affichage immédiatement. Utilise set_led_rgb_data et appelle show.
@@ -161,28 +148,6 @@ class Adeept_SPI_LedPixel:
         self.set_led_rgb_data(index, color)   
         self.show() 
     
-    def set_all_led_color_data(self, r, g, b):
-        """
-        Définit la même couleur pour toutes les LED en fonction des valeurs RGB, sans mettre à jour l'affichage immédiatement. Utilise set_led_color_data mais n'appelle pas show.
-        
-        Paramètres:
-        - r: Valeur rouge (0-255)
-        - g: Valeur verte (0-255)
-        - b: Valeur bleue (0-255)
-        """
-        for i in range(self.led_count):
-            self.set_led_color_data(i, r, g, b)
-
-    def set_all_led_rgb_data(self, color):
-        """
-        Définit la même couleur pour toutes les LED en fonction d'une liste de valeurs RGB, sans mettre à jour l'affichage immédiatement. Utilise set_led_rgb_data mais n'appelle pas show.
-        
-        Paramètres:
-        - color: Liste [R, G, B] avec valeurs 0-255
-        """
-        for i in range(self.led_count):
-            self.set_led_rgb_data(i, color)  
-
     def set_all_led_color(self, r, g, b):
         """
         Définit la même couleur pour toutes les LED en fonction des valeurs RGB, puis met à jour l'affichage immédiatement. Utilise set_led_color_data et appelle show pour afficher les changements.
