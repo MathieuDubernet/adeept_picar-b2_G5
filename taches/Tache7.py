@@ -1,199 +1,163 @@
 import time
-import sys
-import board
-import busio
-import adafruit_pca9685
 
-print("=====================================================")
-# ── 1. Instance UNIQUE I2C + PCA9685 partagée ────────────────────────────────
-try:
-    shared_i2c = busio.I2C(board.SCL, board.SDA)
-    shared_pca = adafruit_pca9685.PCA9685(shared_i2c, address=0x5f)
-    shared_pca.frequency = 50
-except Exception as e:
-    print(f"[ERREUR CRITIQUE] Impossible d'ouvrir le bus I2C : {e}")
-    sys.exit(1)
-
-# ── 2. Monkey-patch pour éviter les doubles ouvertures I2C/PCA9685 ────────────
-class MockI2C:
-    def __new__(cls, *args, **kwargs):
-        return shared_i2c
-
-class MockPCA9685:
-    def __new__(cls, *args, **kwargs):
-        return shared_pca
-    def __init__(self, *args, **kwargs):
-        pass
-
-busio.I2C                 = MockI2C
-adafruit_pca9685.PCA9685  = MockPCA9685
-
-# ── 3. Imports des modules (le patch est actif, plus de conflit I2C) ──────────
-import Tache1
-import Tache2
-import Tache4
-import Tache5
-import Tache8
-
-# ── 4. Utilitaire ─────────────────────────────────────────────────────────────
-def safe_call(obj, name, *args, **kwargs):
-    """Appelle obj.name(*args, **kwargs) si la méthode existe."""
-    if obj is None:
-        return None
-    fn = getattr(obj, name, None)
-    if callable(fn):
-        return fn(*args, **kwargs)
-    return None
-
-# ── 5. Instances globales des sous-systèmes ───────────────────────────────────
-# CORRECTION : on instancie les CLASSES, on n'appelle pas les méthodes sur le module.
-led_ctrl    = None   # Adeept_LED_Control
-ruban_ws2812 = None  # Adeept_SPI_LedPixel
-motor_ctrl  = None   # AdeeptMotorController  (CORRECTION : était appelé en tant que module)
-ultra_ctrl  = None   # AdeeptUltra            (CORRECTION : idem)
-adc_lumiere = None   # ADS7830
+from Tache1 import Adeept_LED_Control
+from Tache2 import Adeept_SPI_LedPixel
+from Tache3 import ServoController
+from Tache4 import AdeeptMotorController
+from Tache5 import AdeeptUltra
+from Tache6 import Adeept_infrared
 
 
-def initialiser_robot():
-    global led_ctrl, ruban_ws2812, motor_ctrl, ultra_ctrl, adc_lumiere
-    print("\n[SYS] Initialisation globale des composants...")
+class RobotSystem:
+    def __init__(self):
+        self.modules = {}
 
-    # ── Phares classiques (Tâche 1) ───────────────────────────────────────────
-    # CORRECTION : instanciation de la classe, pas appel sur le module
-    try:
-        led_ctrl = Tache1.Adeept_LED_Control()
-        led_ctrl.setup()
-        led_ctrl.all_off()
-    except Exception as e:
-        print(f"[ATTENTION] LEDs RGB : {e}")
-        led_ctrl = None
+    def init_modules(self):
+        print("[INIT] LEDs GPIO...")
+        self.modules["led_gpio"] = Adeept_LED_Control()
+        self.modules["led_gpio"].setup()
 
-    # ── Ruban WS2812 (Tâche 2) ────────────────────────────────────────────────
-    try:
-        ruban_ws2812 = Tache2.Adeept_SPI_LedPixel(count=14, bright=255)
-        ruban_ws2812.set_all_led_color(0, 0, 0)
-    except Exception as e:
-        print(f"[ATTENTION] Ruban WS2812 : {e}")
-        ruban_ws2812 = None
+        print("[INIT] LEDs SPI...")
+        self.modules["led_spi"] = Adeept_SPI_LedPixel(14, 128)
 
-    # ── Moteur DC + servo direction (Tâche 4) ────────────────────────────────
-    # CORRECTION : AdeeptMotorController est une classe instance, pas un module
-    try:
-        motor_ctrl = Tache4.AdeeptMotorController(pca=shared_pca)
-        motor_ctrl.motorStop()
-        motor_ctrl.setDirection(motor_ctrl.SERVO_CENTER)
-    except Exception as e:
-        print(f"[ATTENTION] Moteur/direction : {e}")
-        motor_ctrl = None
+        print("[INIT] Servos...")
+        self.modules["servo"] = ServoController()
 
-    # ── Capteur ultrason (Tâche 5) ────────────────────────────────────────────
-    # CORRECTION : AdeeptUltra est une classe instance, pas un module
-    try:
-        ultra_ctrl = Tache5.AdeeptUltra()
-    except Exception as e:
-        print(f"[ATTENTION] Ultrason : {e}")
-        ultra_ctrl = None
+        print("[INIT] Moteur...")
+        self.modules["motor"] = AdeeptMotorController(self.modules["servo"])
 
-    # ── Capteur de lumière ADS7830 (Tâche 8) ──────────────────────────────────
-    # CORRECTION : ADS7830 n'a plus besoin de ServoController interne
-    try:
-        adc_lumiere = Tache8.ADS7830()
-    except Exception as e:
-        print(f"[ATTENTION] ADS7830 : {e}")
-        adc_lumiere = None
+        print("[INIT] Ultrason...")
+        self.modules["ultra"] = AdeeptUltra()
 
-    print("[SYS] Configuration terminée. Lancement dans 2 secondes...\n")
-    time.sleep(2.0)
+        print("[INIT] IR...")
+        self.modules["ir"] = Adeept_infrared()
 
+        print("[OK] Tous les modules sont initialisés.")
 
-def integration_principale():
-    """Boucle principale : suivi de lumière + sécurité anti-collision."""
-    global led_ctrl, ruban_ws2812, motor_ctrl, ultra_ctrl, adc_lumiere
+    def test_led_gpio(self):
+        led = self.modules["led_gpio"]
+        print("[TEST] LEDs GPIO")
+        led.all_off()
+        for i in range(1, 10):
+            led.set_led(i, True)
+            time.sleep(0.2)
+            led.set_led(i, False)
 
-    try:
+    def test_led_spi(self):
+        leds = self.modules["led_spi"]
+        print("[TEST] LEDs SPI")
+        for i in range(1, 15):
+            leds.set_one_led(i, "R", 80)
+            time.sleep(0.1)
+            leds.set_one_led(i, "N", 0)
+
+    def test_servos(self):
+        servo = self.modules["servo"]
+        print("[TEST] Servos")
+        servo.centerAll()
+        time.sleep(1)
+        for ch in [0, 1, 2, 4]:
+            servo.testServo(ch)
+
+    def test_motor(self):
+        motor = self.modules["motor"]
+        print("[TEST] Moteur")
+        motor.MotorRamp(motor.DIR_FORWARD, 20, ramp_time=1.0)
+        time.sleep(1)
+        motor.motorStop()
+        time.sleep(1)
+        motor.MotorRamp(motor.DIR_BACKWARD, 20, ramp_time=1.0)
+        time.sleep(1)
+        motor.motorStop()
+
+    def test_sensors(self):
+        ultra = self.modules["ultra"]
+        ir = self.modules["ir"]
+        print("[TEST] Capteurs")
+        for _ in range(10):
+            print(f"Distance: {ultra.checkdist():.2f} cm | IR: {ir.read()}")
+            time.sleep(0.3)
+
+    def integration_loop(self):
+        motor = self.modules["motor"]
+        ultra = self.modules["ultra"]
+        ir = self.modules["ir"]
+        led = self.modules["led_gpio"]
+        spi = self.modules["led_spi"]
+
+        print("[RUN] Boucle d'intégration démarrée. Ctrl+C pour quitter.")
         while True:
-            # ── Lecture ultrason ──────────────────────────────────────────────
-            # CORRECTION : checkdist() est une méthode d'instance (ultra_ctrl), pas du module
-            distance_cm = 0.0
-            if ultra_ctrl is not None:
-                try:
-                    distance_cm = float(ultra_ctrl.checkdist())
-                except Exception:
-                    distance_cm = 0.0
+            dist = ultra.checkdist()
+            line = ir.read()   # [left, middle, right]
 
-            # ── Lecture des LDR ───────────────────────────────────────────────
-            # CORRECTION : read_both et get_light_direction sont des fonctions
-            #              du module Tache8, pas des méthodes de ADS7830
-            ldr1, ldr2 = 0, 0
-            if adc_lumiere is not None:
-                try:
-                    ldr1, ldr2 = Tache8.read_both(adc_lumiere)
-                except Exception:
-                    ldr1, ldr2 = 0, 0
-
-            direction_lumiere = Tache8.get_light_direction(ldr1, ldr2)
-
-            # Affichage de débogage
-            print(
-                f"Dist: {distance_cm:5.1f} cm | "
-                f"LDR1={int(ldr1):3d} LDR2={int(ldr2):3d} -> {direction_lumiere}"
-            )
-
-            # ── Automate de décision ──────────────────────────────────────────
-
-            if 0 < distance_cm < 20.0:
-                # --- OBSTACLE ---
-                safe_call(motor_ctrl, "motorStop")
-                safe_call(motor_ctrl, "setDirection",
-                          getattr(motor_ctrl, "SERVO_CENTER", 140))
-                safe_call(led_ctrl,   "setAllRGBColor", 255, 0, 0)
-                if ruban_ws2812:
-                    ruban_ws2812.set_all_led_color(255, 0, 0)
-
+            if dist < 15:
+                motor.motorStop()
+                led.setAllRGBColor(255, 0, 0)
+                spi.set_all_led_rgb([255, 0, 0])
             else:
-                # --- SUIVI DE LUMIÈRE ---
-                safe_call(led_ctrl, "setAllRGBColor", 0, 255, 0)
-                if ruban_ws2812:
-                    ruban_ws2812.set_all_led_color(0, 255, 0)
+                led.setAllRGBColor(0, 255, 0)
+                spi.set_all_led_rgb([0, 50, 0])
 
-                servo_center = getattr(motor_ctrl, "SERVO_CENTER", 140) if motor_ctrl else 140
-                servo_left   = getattr(motor_ctrl, "SERVO_LEFT",   110) if motor_ctrl else 110
-                servo_right  = getattr(motor_ctrl, "SERVO_RIGHT",  170) if motor_ctrl else 170
+                if line == [1, 0, 1] or line == [0, 1, 0] :
+                    motor.servo_controller.setAngle(0, motor.SERVO_CENTER)
+                    motor.Motor(motor.DIR_FORWARD, 25)
+                elif line == [1, 1, 0]:
+                    motor.servo_controller.setAngle(0, motor.SERVO_LEFT)
+                    motor.Motor(motor.DIR_FORWARD, 20)
+                elif line == [0, 1, 1]:
+                    motor.servo_controller.setAngle(0, motor.SERVO_RIGHT)
+                    motor.Motor(motor.DIR_FORWARD, 20)
+                else:
+                    motor.motorStop()
 
-                if direction_lumiere == "GAUCHE":
-                    # Inversion physique gauche/droite
-                    safe_call(motor_ctrl, "setDirection", servo_right)
-                    safe_call(motor_ctrl, "Motor",
-                              getattr(motor_ctrl, "DIR_FORWARD", 1), 25)
-
-                elif direction_lumiere == "DROITE":
-                    safe_call(motor_ctrl, "setDirection", servo_left)
-                    safe_call(motor_ctrl, "Motor",
-                              getattr(motor_ctrl, "DIR_FORWARD", 1), 25)
-
-                elif direction_lumiere == "CENTRE":
-                    safe_call(motor_ctrl, "setDirection", servo_center)
-                    safe_call(motor_ctrl, "Motor",
-                              getattr(motor_ctrl, "DIR_FORWARD", 1), 30)
-
-                elif direction_lumiere == "OBSCUR":
-                    safe_call(motor_ctrl, "motorStop")
-                    safe_call(led_ctrl,   "setAllRGBColor", 0, 0, 255)
-                    if ruban_ws2812:
-                        ruban_ws2812.set_all_led_color(0, 0, 255)
-
+            print(f"Distance={dist:.1f} cm | IR={line}")
             time.sleep(0.1)
 
-    except KeyboardInterrupt:
-        print("\n[SYS] Arrêt sécurisé du PiCar-B...")
-        # CORRECTION : destroy() est une méthode d'instance de motor_ctrl
-        safe_call(motor_ctrl,  "destroy")
-        safe_call(led_ctrl,    "destroy")
-        if ruban_ws2812:
-            ruban_ws2812.led_close()
-        print("[SYS] Tout est libéré. Mission accomplie !")
+    def cleanup(self):
+        print("[CLEANUP] Arrêt propre...")
+        try:
+            if "motor" in self.modules:
+                self.modules["motor"].motorStop()
+        except:
+            pass
+
+        try:
+            if "led_gpio" in self.modules:
+                self.modules["led_gpio"].destroy()
+        except:
+            pass
+
+        try:
+            if "led_spi" in self.modules:
+                self.modules["led_spi"].led_close()
+        except:
+            pass
+
+        try:
+            if "servo" in self.modules:
+                self.modules["servo"].cleanup()
+        except:
+            pass
+
+        print("[OK] Ressources libérées.")
 
 
 if __name__ == "__main__":
-    initialiser_robot()
-    integration_principale()
+    robot = RobotSystem()
+    try:
+        robot.init_modules()
+
+        robot.test_led_gpio()
+        robot.test_led_spi()
+        robot.test_servos()
+        robot.test_motor()
+        robot.test_sensors()
+
+        robot.integration_loop()
+
+    except KeyboardInterrupt:
+        print("\n[STOP] Interruption utilisateur.")
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+    finally:
+        robot.cleanup()
