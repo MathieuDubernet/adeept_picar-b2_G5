@@ -14,11 +14,13 @@ class Adeept_infrared:
         self.middle = InputDevice(pin=self.line_pin_middle)
         self.right = InputDevice(pin=self.line_pin_right)
 
-    """
-    Fonction permettant de déterminer l'état des trois capteurs IR réflectifs (gauche, milieu, droite) et de retourner ces états sous forme de liste.
-    """
+  
     def read(self):
-        """Retourne [gauche, milieu, droite] sous forme de booléens."""
+        """
+        Fonction permettant de déterminer l'état des trois capteurs IR réflectifs (gauche, milieu, droite) 
+        et de retourner ces états sous forme de liste.
+        Retourne [gauche, milieu, droite] sous forme de booléens.
+        """
         status_right = self.right.value
         status_middle = self.middle.value
         status_left = self.left.value
