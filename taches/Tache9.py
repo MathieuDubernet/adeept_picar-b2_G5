@@ -1,8 +1,6 @@
 import sys
 import threading
 from time import sleep, time
-from board import SCL, SDA
-import busio
 from adafruit_pca9685 import PCA9685
 
 # Import des classes des autres tâches
@@ -52,12 +50,13 @@ class AdeeptRobot:
         self._light_state   = False
         self._last_toggle   = time()
         self._destroyed = False
+        self._last_dir     = "CENTER"
         self._accel_thread  = None   # thread de la rampe d'accélération en cours
 
         # Mutex pour protéger _command entre threads
         self._cmd_lock = threading.Lock()
 
-        print("Commandes : 'M' → démarrer | 'A' ou 'a' → arrêter | 'Q' → quitter")
+        print("Commandes : 'M' → démarrer | 'A' → arrêter | 'Q' → quitter")
 
 
     @property
@@ -79,7 +78,7 @@ class AdeeptRobot:
             ramp_time=self.ACCEL_TIME
         )
 
-    def _stopAccel(self):
+    def _stop_accel(self):
         """
         Interrompt proprement la rampe d'accélération :
         lève le drapeau d'arrêt puis attend que le thread sorte réellement
@@ -90,9 +89,9 @@ class AdeeptRobot:
             self._accel_thread.join()
             self._accel_thread = None
 
-    def _startMove(self):
+    def _start_move(self):
         """Démarre le robot : éteint les feux de détresse, accélère."""
-        self._stopHazard()
+        self._stop_hazard()
         self.motor._stop_ramp.clear()
         self.leds.setAllRGBColor(255, 255, 255)   # Phares blancs
         self.SPIleds.set_all_led_rgb([255, 255, 255])
@@ -100,10 +99,10 @@ class AdeeptRobot:
         self._accel_thread = threading.Thread(target=self._accelerate, daemon=True)
         self._accel_thread.start()
 
-    def _stopMove(self):
+    def _stop_move(self):
         """Arrêt manuel avec rampe de décélération."""
         self.state = "STOP"
-        self._stopAccel()                 # stoppe l'accélération en cours (anti-concurrence)
+        self._stop_accel()                 # stoppe l'accélération en cours (anti-concurrence)
         self.motor._stop_ramp.clear()     # ré-autorise la rampe (de décélération)
         self.motor.MotorRamp(
             self.motor.DIR_FORWARD,
@@ -115,28 +114,28 @@ class AdeeptRobot:
         self.leds.all_off()
         self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _emergencyStop(self, distance):
+    def _emergency_stop(self, distance):
         """Arrêt d'urgence sur obstacle détecté : coupe le moteur immédiatement."""
         print(f"[OBSTACLE] Détecté à {distance:.1f} cm ! Arrêt d'urgence.")
-        self._stopAccel()             # interrompt la rampe et attend la fin du thread
+        self._stop_accel()             # interrompt la rampe et attend la fin du thread
         self.state = "HAZARD"
         self.motor.motorStop()        # arrêt net, plus aucun thread concurrent
-        self._startHazard()
+        self._start_hazard()
 
-    def _startHazard(self):
+    def _start_hazard(self):
         """Active le mode feux de détresse (clignotement orange)."""
         print("[DÉTRESSE] Feux de détresse ACTIVÉS")
         self._light_state = False
         self._last_toggle = time()
 
-    def _stopHazard(self):
+    def _stop_hazard(self):
         """Désactive les feux de détresse."""
         if self._state == "HAZARD":
             print("[DÉTRESSE] Feux de détresse ÉTEINTS")
         self.leds.all_off()
         self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _updateHazardLights(self):
+    def _update_hazard_lights(self):
         """
         À appeler à chaque tour de boucle quand state == HAZARD.
         Fait clignoter toutes les LEDs en orange à HAZARD_PERIOD.
@@ -158,7 +157,7 @@ class AdeeptRobot:
                 self.leds.all_off()
                 self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _readKeyboard(self):
+    def _read_keyboard(self):
         """Thread : lit les commandes clavier sans bloquer la boucle principale."""
         while self._running:
             try:
@@ -169,7 +168,7 @@ class AdeeptRobot:
             except Exception:
                 pass
 
-    def _processCommand(self):
+    def _process_command(self):
         """Traite la dernière commande reçue."""
         with self._cmd_lock:
             cmd = self._command
@@ -178,21 +177,21 @@ class AdeeptRobot:
         if not cmd:
             return
 
-        if cmd == 'M':
+        if cmd.upper() == 'M':
             if self._state in ("STOP", "HAZARD"):
                 print("[ORDRE] Départ demandé.")
-                self._startMove()
+                self._start_move()
             else:
                 print("[INFO] Robot déjà en marche.")
 
-        elif cmd in ('A', 'a'):
+        elif cmd.upper() == 'A':
             if self._state == "MOVE":
                 print("[ORDRE] Arrêt manuel demandé.")
-                self._stopMove()
+                self._stop_move()
             else:
                 print("[INFO] Robot déjà arrêté.")
 
-        elif cmd in ('Q', 'q'):
+        elif cmd.upper() == 'Q':
             print("[ORDRE] Quitter.")
             self._running = False
 
@@ -204,25 +203,25 @@ class AdeeptRobot:
         """Boucle principale du robot."""
 
         # Démarrage thread clavier
-        kbd_thread = threading.Thread(target=self._readKeyboard, daemon=True)
+        kbd_thread = threading.Thread(target=self._read_keyboard, daemon=True)
         kbd_thread.start()
 
         try:
             while self._running:
 
                 # 1. Traitement commande clavier
-                self._processCommand()
+                self._process_command()
 
                 # 2. Mesure distance
                 distance = self.ultra.checkdist()
 
                 # 3. Détection obstacle si en mouvement
                 if self._state == "MOVE" and distance < self.OBSTACLE_DIST:
-                    self._emergencyStop(distance)
+                    self._emergency_stop(distance)
 
                 # 4. Clignotement feux de détresse si HAZARD
                 elif self._state == "HAZARD":
-                    self._updateHazardLights()
+                    self._update_hazard_lights()
                     # Affichage distance pour info
                     print(f"[SONAR] Distance : {distance:.1f} cm", end='\r')
 
