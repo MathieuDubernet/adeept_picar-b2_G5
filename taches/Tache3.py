@@ -11,9 +11,9 @@ class ServoController(object):
         self.frequency = 50
         self.angle_min = 10
         self.angle_max = 170
-        self.servo_test = 4
+        self.servo_test = 15
         self.servos_robot = [0, 1, 2]
-        self.all_servos = [0, 1, 2, 4]
+        self.all_servos = [0, 1, 2, 15]
 
         self.i2c = busio.I2C(SCL, SDA)
         self._owns_pca = (pca is None)
@@ -27,7 +27,7 @@ class ServoController(object):
             0: servo.Servo(self.pca.channels[0], min_pulse=500, max_pulse=2400, actuation_range=180),
             1: servo.Servo(self.pca.channels[1], min_pulse=500, max_pulse=2400, actuation_range=180),
             2: servo.Servo(self.pca.channels[2], min_pulse=500, max_pulse=2400, actuation_range=180),
-            4: servo.Servo(self.pca.channels[4], min_pulse=500, max_pulse=2400, actuation_range=180),
+            15: servo.Servo(self.pca.channels[15], min_pulse=500, max_pulse=2400, actuation_range=180),
         }
 
         self.current_angles = {ch: 90 for ch in self.all_servos}
@@ -96,17 +96,17 @@ if __name__ == "__main__":
 
     try:
         print("Initialisation OK")
-        print("Étape 1 : test sécurité sur le servo libre CH4")
+        print("Étape 1 : test sécurité sur le servo libre CH15")
         controller.testServo(controller.servo_test)
 
         print("\nÉtape 2 : centrage des servos")
         controller.centerAll()
 
         print("\nÉtape 3 : commande manuelle")
-        print("Servos disponibles : 0, 1, 2, 4")
+        print("Servos disponibles : 0, 1, 2, 15")
         print(f"Angles autorisés : {controller.angle_min} à {controller.angle_max}")
-        print("Commande : numero angle   (ex: 4 90)")
-        print("Commandes spéciales : center, test, test 4, quit\n")
+        print("Commande : numero angle   (ex: 15 90)")
+        print("Commandes spéciales : center, test, test 15, quit\n")
 
         while True:
             cmd = input(">>> ").strip().lower()
@@ -129,7 +129,7 @@ if __name__ == "__main__":
                 elif len(parts) == 2:
                     controller.testServo(int(parts[1]))
                 else:
-                    print("Format invalide. Exemple : test 4")
+                    print("Format invalide. Exemple : test 15")
                 continue
 
             if len(parts) != 2:
