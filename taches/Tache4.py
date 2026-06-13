@@ -1,7 +1,5 @@
 import threading
 import time
-from board import SCL, SDA
-import busio
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import motor
 from Tache3 import ServoController
@@ -38,9 +36,11 @@ class AdeeptMotorController:
         self.direction_channel = 0
 
         # Angles de direction configurables
-        self.SERVO_CENTER = 90
-        self.SERVO_LEFT = 60
-        self.SERVO_RIGHT = 120
+        self.SERVO_CENTER    = 90
+        self.SERVO_LEFT      = self.SERVO_CENTER - 30
+        self.SERVO_RIGHT     = self.SERVO_CENTER + 30
+        self.SERVO_SLIGHT_LEFT  = self.SERVO_CENTER - 15
+        self.SERVO_SLIGHT_RIGHT = self.SERVO_CENTER + 15
 
     def motorStop(self):
         self.motor1.throttle = 0
