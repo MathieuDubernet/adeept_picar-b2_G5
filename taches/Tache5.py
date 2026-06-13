@@ -20,7 +20,7 @@ class AdeeptUltra:
         )
 
     def checkdist(self):
-        return self.sensor.distance * 10
+        return self.sensor.distance * 100
 
 if __name__ == "__main__":
     ultra = AdeeptUltra()

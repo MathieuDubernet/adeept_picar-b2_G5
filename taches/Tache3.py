@@ -40,7 +40,7 @@ class ServoController(object):
             return self.angle_max
         return angle
 
-    def setAngle(self, channel, angle, step=2, delay=0.02):
+    def setAngle(self, channel, angle, step=20, delay=0.1):
         if channel not in self.servos:
             raise ValueError(f"Servo invalide: {channel}. Choix possibles: {self.all_servos}")
 
