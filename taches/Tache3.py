@@ -30,6 +30,8 @@ class ServoController(object):
             4: servo.Servo(self.pca.channels[4], min_pulse=500, max_pulse=2400, actuation_range=180),
         }
 
+        self.current_angles = {ch: 90 for ch in self.all_servos}
+
     def clampAngle(self, angle):
         angle = int(angle)
         if angle < self.angle_min:

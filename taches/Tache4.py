@@ -3,50 +3,47 @@ import time
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
-from adafruit_motor import motor, servo
+from adafruit_motor import motor
+from Tache3 import ServoController
 
 
 class AdeeptMotorController:
 
-    MOTOR_M1_IN1 = 9       # Pôle positif M1
-    MOTOR_M1_IN2 = 8       # Pôle négatif M1
-
-    SERVO_DIR_CHANNEL = 0
-    SERVO_MIN_PULSE   = 500
-    SERVO_MAX_PULSE   = 2400
+    MOTOR_M1_IN1 = 15       # Pôle positif M1
+    MOTOR_M1_IN2 = 14       # Pôle négatif M1
 
     DIR_FORWARD  =  1
     DIR_BACKWARD = -1
 
-    # Angle central du servo (à ajuster lors de l'étalonnage)
-    SERVO_CENTER  = 140      # Position centrale (à ajuster)
-    SERVO_LEFT    = SERVO_CENTER - 30  # Limite gauche (à ajuster)
-    SERVO_RIGHT   = SERVO_CENTER + 30  # Limite droite (à ajuster)
-
-    def __init__(self, pca=None):
+    def __init__(self, servo_controller):
         """
-        Initialise le contrôleur moteur/direction.
-        Si aucun PCA9685 n'est fourni, en crée un (bus I2C, fréquence 50 Hz).
-        Construit ensuite le moteur M1 sur ses deux canaux et active le mode
-        SLOW_DECAY (freinage progressif).
+        Initialise le contrôleur du moteur en utilisant en entrée le controleur des servos pour orienter les roues.
+        Construit ensuite le moteur M1 sur ses deux canaux et active le mode SLOW_DECAY (freinage progressif).
 
         Paramètres:
-        - pca: instance PCA9685 partagée (None = la classe crée la sienne)
+        - servo_controller: instance ServoController déjà initialisée
         """
-        self._owns_pca = (pca is None)
-        if pca is None:
-            self.i2c = busio.I2C(SCL, SDA)
-            self.pca = PCA9685(self.i2c, address=0x5f)
-            self.pca.frequency = 50
-        else:
-            self.pca = pca
+        self.i2c = busio.I2C(SCL, SDA)
+        self.pca = PCA9685(self.i2c, address=0x5F)
+        self.pca.frequency = 50
+        self.servo_controller = servo_controller
+
         self._stop_ramp = threading.Event()
-        self.motor1 = motor.DCMotor(self.pca.channels[self.MOTOR_M1_IN1],
-                                   self.pca.channels[self.MOTOR_M1_IN2])
+
+        self.motor1 = motor.DCMotor(
+            self.pca.channels[self.MOTOR_M1_IN1],
+            self.pca.channels[self.MOTOR_M1_IN2]
+        )
         self.motor1.decay_mode = motor.SLOW_DECAY
+        
+        self.direction_channel = 0
+
+        # Angles de direction configurables
+        self.SERVO_CENTER = 90
+        self.SERVO_LEFT = 60
+        self.SERVO_RIGHT = 120
 
     def motorStop(self):
-        """Coupe le moteur (throttle = 0)."""
         self.motor1.throttle = 0
         print("[MOTEUR] Arrêt")
 
@@ -60,52 +57,18 @@ class AdeeptMotorController:
         - direction: DIR_FORWARD (+1) ou DIR_BACKWARD (-1)
         - speed_pct: vitesse en pourcentage (0-100)
         """
+
         speed_pct = max(0, min(100, speed_pct))
         self.motor1.throttle = (speed_pct / 100) * direction
-        label = "Avant" if direction == self.DIR_FORWARD else "Arrière"
-        print(f"[MOTEUR] {label} - {speed_pct}%")
-
-    def set_angle(self, channel, angle):
-        """
-        Positionne un servo sur un angle (0-180°).
-        Crée l'objet Servo sur le canal demandé avec les largeurs d'impulsion
-        min/max de la classe, puis applique l'angle borné entre 0 et 180.
-
-        Paramètres:
-        - channel: numéro de canal PCA9685 du servo
-        - angle: angle cible en degrés (0-180)
-        """
-        s = servo.Servo(self.pca.channels[channel],
-                        min_pulse=self.SERVO_MIN_PULSE,
-                        max_pulse=self.SERVO_MAX_PULSE,
-                        actuation_range=180)
-        s.angle = max(0, min(180, angle))
-
-    def setDirection(self, angle):
-        """
-        Oriente les roues avant via le servo de direction.
-
-        Paramètres:
-        - angle: angle de braquage en degrés (voir SERVO_LEFT/CENTER/RIGHT)
-        """
-        self.set_angle(self.SERVO_DIR_CHANNEL, angle)
-        print(f"[SERVO] Direction → {angle}°")
 
     def destroy(self):
         """
-        Arrêt propre : coupe le moteur, recentre la direction et libère le
-        PCA9685 (uniquement si cette instance en est propriétaire).
+        Arrêt propre : coupe le moteur, recentre la direction et libère le PCA9685.
         """
         self.motorStop()
-        self.setDirection(self.SERVO_CENTER)
-        if self._owns_pca:
-            self.pca.deinit()
+        self.servo_controller.setAngle(1, self.SERVO_CENTER)
+        self.servo_controller.cleanup()
         print("[SYS] GPIO libérés.")
-
-    def MotorSetSilent(self, direction, speed_pct):
-            """Applique la vitesse sans affichage."""
-            speed_pct = max(0, min(100, speed_pct))
-            self.motor1.throttle = (speed_pct / 100) * direction
 
     def MotorRamp(self, direction, target_speed_pct, ramp_time=1.0, start_speed=0):
         """
@@ -128,23 +91,12 @@ class AdeeptMotorController:
         for i in range(steps + 1):
             if self._stop_ramp.is_set(): break
             current_speed = start_speed + (target_speed_pct - start_speed) * i / steps
-            self.MotorSetSilent(direction, current_speed)
+            self.Motor(direction, current_speed)
             time.sleep(step_delay)
 
         print(f"[RAMPE] Vitesse atteinte : {target_speed_pct}%")
 
-    def MotorFull(self, direction, target_speed_pct, ramp_time=1.0):
-        """
-        Cycle complet : montée en rampe, maintien 1 s, descente en rampe, arrêt.
-        """
-        self.MotorRamp(direction, target_speed_pct, ramp_time)                 # montée
-        time.sleep(1.0)                                                        # maintien
-        self.MotorRamp(direction, 0, ramp_time, start_speed=target_speed_pct)  # descente
-        self.motorStop()
-
 def main(AdeeptMotor):
-    AdeeptMotor.setDirection(AdeeptMotor.SERVO_CENTER)
-
     print("Commande manuelle moteur / direction :")
     print(" 1 => Avancer (25%)")
     print(" 2 => Reculer (25%)")
@@ -162,17 +114,17 @@ def main(AdeeptMotor):
                 print("Arrêt du programme.")
                 break
             elif cmd == "1":
-                AdeeptMotor.Motor(AdeeptMotor.DIR_FORWARD, 25)
+                AdeeptMotor.MotorRamp(AdeeptMotor.DIR_FORWARD, 25)
             elif cmd == "2":
-                AdeeptMotor.Motor(AdeeptMotor.DIR_BACKWARD, 25)
+                AdeeptMotor.MotorRamp(AdeeptMotor.DIR_FORWARD, 0, start_speed=25)
             elif cmd == "3":
                 AdeeptMotor.motorStop()
             elif cmd == "4":
-                AdeeptMotor.setDirection(AdeeptMotor.SERVO_CENTER)
+                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_CENTER)
             elif cmd == "5":
-                AdeeptMotor.setDirection(AdeeptMotor.SERVO_LEFT)
+                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_LEFT)
             elif cmd == "6":
-                AdeeptMotor.setDirection(AdeeptMotor.SERVO_RIGHT)
+                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_RIGHT)
             else:
                 print("Commande invalide (0 à 6).")
 
@@ -181,12 +133,11 @@ def main(AdeeptMotor):
 
 
 if __name__ == "__main__":
-    AdeeptMotor = None  
+    servo_controller = ServoController()
+    AdeeptMotor = AdeeptMotorController(servo_controller)
     try:
-        AdeeptMotor = AdeeptMotorController()
         main(AdeeptMotor)
     except Exception as e:
         print(f"Erreur : {e}")
     finally:
-        if AdeeptMotor is not None:
-            AdeeptMotor.destroy()
+        AdeeptMotor.destroy()
