@@ -6,15 +6,15 @@ import time
 class Tache11Robot(AdeeptRobot):
 
     OBSTACLE_DIST  = 20.0   # cm — seuil d'arrêt d'urgence
-    CRUISE_SPEED   = 20   # % vitesse de croisière
+    CRUISE_SPEED   = 13   # % vitesse de croisière
     ACCEL_TIME     = 1.5    # s — durée rampe accélération
     HAZARD_PERIOD  = 0.25   # s — période clignotement feux de détresse
-    LOOP_DELAY     = 0.00   # s — délai boucle principale
+    LOOP_DELAY     = 0.05   # s — délai boucle principale
     BACKWARD_DELAY = 1
     DEFAULT_ANGLE = 90
 
-    SLIGHT_DEVIATION = 30
-    BIG_DEVIATION = 70
+    SLIGHT_DEVIATION = 20
+    BIG_DEVIATION = 40
 
     # 0 = droite
     # 180 = gauche
@@ -46,6 +46,7 @@ class Tache11Robot(AdeeptRobot):
             target_angle = self.DEFAULT_ANGLE - self.BIG_DEVIATION
         elif line_binding == [0, 0, 0]:
             self.motor.motorStop()
+            self.servo_controller.setAngle(0, 180-self.actualAngle)
             self.motor.Motor(self.motor.DIR_BACKWARD, self.CRUISE_SPEED)
             time.sleep(0.5)
             self.motor.motorStop()
