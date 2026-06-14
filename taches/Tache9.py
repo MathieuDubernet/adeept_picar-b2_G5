@@ -69,7 +69,7 @@ class AdeeptRobot:
         self._state = new_state
 
 
-    def _accelerate(self):
+    def accelerate(self):
         """Rampe d'accélération progressive. Interruptible."""
         print(f"[MOTEUR] Accélération → {self.CRUISE_SPEED}% en {self.ACCEL_TIME}s")
         self.motor.MotorRamp(
@@ -78,7 +78,7 @@ class AdeeptRobot:
             ramp_time=self.ACCEL_TIME
         )
 
-    def _stop_accel(self):
+    def stop_accel(self):
         """
         Interrompt proprement la rampe d'accélération :
         lève le drapeau d'arrêt puis attend que le thread sorte réellement
@@ -89,20 +89,20 @@ class AdeeptRobot:
             self._accel_thread.join()
             self._accel_thread = None
 
-    def _start_move(self):
+    def start_move(self):
         """Démarre le robot : éteint les feux de détresse, accélère."""
-        self._stop_hazard()
+        self.stop_hazard()
         self.motor._stop_ramp.clear()
         self.leds.setAllRGBColor(255, 255, 255)   # Phares blancs
         self.SPIleds.set_all_led_rgb([255, 255, 255])
         self.state = "MOVE"
-        self._accel_thread = threading.Thread(target=self._accelerate, daemon=True)
+        self._accel_thread = threading.Thread(target=self.accelerate, daemon=True)
         self._accel_thread.start()
 
-    def _stop_move(self):
+    def stop_move(self):
         """Arrêt manuel avec rampe de décélération."""
         self.state = "STOP"
-        self._stop_accel()                 # stoppe l'accélération en cours (anti-concurrence)
+        self.stop_accel()                 # stoppe l'accélération en cours (anti-concurrence)
         self.motor._stop_ramp.clear()     # ré-autorise la rampe (de décélération)
         self.motor.MotorRamp(
             self.motor.DIR_FORWARD,
@@ -114,28 +114,28 @@ class AdeeptRobot:
         self.leds.all_off()
         self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _emergency_stop(self, distance):
+    def emergency_stop(self, distance):
         """Arrêt d'urgence sur obstacle détecté : coupe le moteur immédiatement."""
         print(f"[OBSTACLE] Détecté à {distance:.1f} cm ! Arrêt d'urgence.")
-        self._stop_accel()             # interrompt la rampe et attend la fin du thread
+        self.stop_accel()             # interrompt la rampe et attend la fin du thread
         self.state = "HAZARD"
         self.motor.motorStop()        # arrêt net, plus aucun thread concurrent
-        self._start_hazard()
+        self.start_hazard()
 
-    def _start_hazard(self):
+    def start_hazard(self):
         """Active le mode feux de détresse (clignotement orange)."""
         print("[DÉTRESSE] Feux de détresse ACTIVÉS")
         self._light_state = False
         self._last_toggle = time()
 
-    def _stop_hazard(self):
+    def stop_hazard(self):
         """Désactive les feux de détresse."""
         if self._state == "HAZARD":
             print("[DÉTRESSE] Feux de détresse ÉTEINTS")
         self.leds.all_off()
         self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _update_hazard_lights(self):
+    def update_hazard_lights(self):
         """
         À appeler à chaque tour de boucle quand state == HAZARD.
         Fait clignoter toutes les LEDs en orange à HAZARD_PERIOD.
@@ -157,7 +157,7 @@ class AdeeptRobot:
                 self.leds.all_off()
                 self.SPIleds.set_all_led_rgb([0, 0, 0])
 
-    def _read_keyboard(self):
+    def read_keyboard(self):
         """Thread : lit les commandes clavier sans bloquer la boucle principale."""
         while self._running:
             try:
@@ -168,7 +168,7 @@ class AdeeptRobot:
             except Exception:
                 pass
 
-    def _process_command(self):
+    def process_command(self):
         """Traite la dernière commande reçue."""
         with self._cmd_lock:
             cmd = self._command
@@ -180,14 +180,14 @@ class AdeeptRobot:
         if cmd.upper() == 'M':
             if self._state in ("STOP", "HAZARD"):
                 print("[ORDRE] Départ demandé.")
-                self._start_move()
+                self.start_move()
             else:
                 print("[INFO] Robot déjà en marche.")
 
         elif cmd.upper() == 'A':
             if self._state == "MOVE":
                 print("[ORDRE] Arrêt manuel demandé.")
-                self._stop_move()
+                self.stop_move()
             else:
                 print("[INFO] Robot déjà arrêté.")
 
@@ -203,25 +203,25 @@ class AdeeptRobot:
         """Boucle principale du robot."""
 
         # Démarrage thread clavier
-        kbd_thread = threading.Thread(target=self._read_keyboard, daemon=True)
+        kbd_thread = threading.Thread(target=self.read_keyboard, daemon=True)
         kbd_thread.start()
 
         try:
             while self._running:
 
                 # 1. Traitement commande clavier
-                self._process_command()
+                self.process_command()
 
                 # 2. Mesure distance
                 distance = self.ultra.checkdist()
 
                 # 3. Détection obstacle si en mouvement
                 if self._state == "MOVE" and distance < self.OBSTACLE_DIST:
-                    self._emergency_stop(distance)
+                    self.emergency_stop(distance)
 
                 # 4. Clignotement feux de détresse si HAZARD
                 elif self._state == "HAZARD":
-                    self._update_hazard_lights()
+                    self.update_hazard_lights()
                     # Affichage distance pour info
                     print(f"[SONAR] Distance : {distance:.1f} cm", end='\r')
 
