@@ -53,10 +53,12 @@ class Tache11Robot(AdeeptRobot):
             if self.LAST_BINDING == [1, 1, 1] and self.LAST_BINDING == [1, 0, 1] :
                 target_angle = self.DEFAULT_ANGLE   
                 time.sleep(3)
-            else :
-                self.servo_controller.setAngle(0,  2*self.DEFAULT_ANGLE-self.actualAngle)
+            else:
+                self.motor.motorStop()
+                self.servo_controller.setAngle(0, 2*self.DEFAULT_ANGLE-self.actualAngle)
                 self.motor.Motor(self.motor.DIR_BACKWARD, self.CRUISE_SPEED)
-                time.sleep(0.5)
+                while self.infrared.read() == [0,0,0]:
+                    continue
                 self.motor.motorStop()
                 target_angle = self.DEFAULT_ANGLE + self.SLIGHT_DEVIATION
                 self.motor.Motor(self.motor.DIR_FORWARD, self.CRUISE_SPEED)
