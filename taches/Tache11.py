@@ -11,8 +11,8 @@ class Tache11Robot(AdeeptRobot):
     HAZARD_PERIOD  = 0.25   # s — période clignotement feux de détresse
     LOOP_DELAY     = 0.05   # s — délai boucle principale
     BACKWARD_DELAY = 1
-    DEFAULT_ANGLE = 90
-
+    DEFAULT_ANGLE = 140 # à changer selon  le robot
+  
     SLIGHT_DEVIATION = 20
     BIG_DEVIATION = 40
 
@@ -23,6 +23,7 @@ class Tache11Robot(AdeeptRobot):
         super().__init__()
         # attributs spécifiques à la tâche 11
         self.infrared = infrared
+        self.LAST_BINDING = [0, 0, 0]
         self.actualAngle = self.servo_controller.current_angles[0]
 
     def trouverLaLigne(self, line_binding):
@@ -33,25 +34,32 @@ class Tache11Robot(AdeeptRobot):
             return
 
         target_angle = self.DEFAULT_ANGLE
-
+        self.LAST_BINDING = [1, 1, 1]
         if line_binding == [0, 1, 1]:
+            self.LAST_BINDING = [0, 1, 1]
             if self.actualAngle >= self.DEFAULT_ANGLE:
                 target_angle = self.DEFAULT_ANGLE - self.SLIGHT_DEVIATION
         elif line_binding == [1, 1, 0]:
+            self.LAST_BINDING = [1, 1, 0]
             if self.actualAngle <= self.DEFAULT_ANGLE:
                 target_angle = self.DEFAULT_ANGLE + self.SLIGHT_DEVIATION
         elif line_binding == [1, 0, 0]:
+            self.LAST_BINDING = [1, 1, 0]
             target_angle = self.DEFAULT_ANGLE + self.BIG_DEVIATION
         elif line_binding == [0, 0, 1]:
+            self.LAST_BINDING = [0, 1, 1]
             target_angle = self.DEFAULT_ANGLE - self.BIG_DEVIATION
         elif line_binding == [0, 0, 0]:
-            self.motor.motorStop()
-            self.servo_controller.setAngle(0, 180-self.actualAngle)
-            self.motor.Motor(self.motor.DIR_BACKWARD, self.CRUISE_SPEED)
-            time.sleep(0.5)
-            self.motor.motorStop()
-            target_angle = self.DEFAULT_ANGLE + self.SLIGHT_DEVIATION
-            self.motor.Motor(self.motor.DIR_FORWARD, self.CRUISE_SPEED)
+            if self.LAST_BINDING == [1, 1, 1] and self.LAST_BINDING == [1, 0, 1] :
+                target_angle = self.DEFAULT_ANGLE   
+                time.sleep(3)
+            else :
+                self.servo_controller.setAngle(0,  2*self.DEFAULT_ANGLE-self.actualAngle)
+                self.motor.Motor(self.motor.DIR_BACKWARD, self.CRUISE_SPEED)
+                time.sleep(0.5)
+                self.motor.motorStop()
+                target_angle = self.DEFAULT_ANGLE + self.SLIGHT_DEVIATION
+                self.motor.Motor(self.motor.DIR_FORWARD, self.CRUISE_SPEED)
 
         if target_angle != self.actualAngle:
             self.servo_controller.setAngle(0, target_angle)

@@ -7,8 +7,8 @@ from Tache3 import ServoController
 
 class AdeeptMotorController:
 
-    MOTOR_M1_IN1 = 15       # Pôle positif M1
-    MOTOR_M1_IN2 = 14       # Pôle négatif M1
+    MOTOR_M1_IN1 = 8       # Pôle positif M1(à changer selon le robot)
+    MOTOR_M1_IN2 = 9       # Pôle négatif M1(à changer selon le robot)
 
     DIR_FORWARD  =  1
     DIR_BACKWARD = -1
@@ -36,7 +36,7 @@ class AdeeptMotorController:
         self.direction_channel = 0
 
         # Angles de direction configurables
-        self.SERVO_CENTER    = 90
+        self.SERVO_CENTER    = 140 # à changer selon le robot
         self.SERVO_LEFT      = self.SERVO_CENTER - 30
         self.SERVO_RIGHT     = self.SERVO_CENTER + 30
         self.SERVO_SLIGHT_LEFT  = self.SERVO_CENTER - 15

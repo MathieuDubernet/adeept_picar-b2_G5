@@ -10,3 +10,6 @@ sudo pkill -f python3
 
 # ou plus ciblé :
 sudo pkill -f 01_LED.py
+
+# les configs qui changent en fonction du bot
+control +maj+f "à changer selon le robot"
