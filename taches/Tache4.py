@@ -60,6 +60,23 @@ class AdeeptMotorController:
         speed_pct = max(0, min(100, speed_pct))
         self.motor1.throttle = (speed_pct / 100) * direction
 
+    def setDirection(self, angle):
+        """
+        Oriente les roues en fonction de l'angle fourni.
+        L'angle est contraint dans la plage [SERVO_LEFT, SERVO_RIGHT].
+
+        Paramètres:
+        - angle: angle cible pour le servo de direction (L C R)
+        """
+        if angle == "L":
+            self.servo_controller.setAngle(1, self.SERVO_LEFT)
+        elif angle == "R":
+            self.servo_controller.setAngle(1, self.SERVO_RIGHT)
+        elif angle == "C":
+            self.servo_controller.setAngle(1, self.SERVO_CENTER)
+        else:
+            raise ValueError("Angle invalide. Choix possibles : 'L', 'C', 'R'.")
+
     def destroy(self):
         """
         Arrêt propre : coupe le moteur, recentre la direction et libère le PCA9685.
