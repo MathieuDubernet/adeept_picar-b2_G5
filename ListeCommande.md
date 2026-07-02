@@ -2,6 +2,9 @@
 
  ## Passer un fichier de l'ordinateur à la Rasp
  
+ dans terminal cmd:
+ ssh 172.20.10.2
+
  pscp "C:\Users\matdu\Desktop\Cours_ING1\Annee_1\MasterCamp\Test.txt" user@192.168.4.1:/home/user/
 
 ## Kill python running en background

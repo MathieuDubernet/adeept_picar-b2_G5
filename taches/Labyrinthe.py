@@ -54,5 +54,7 @@ class Labyrinthe:
             print("Arrêt du labyrinthe.")
             self.motor.motorStop()
 
-    
+if __name__ == "__main__":
+    laby = Labyrinthe()
+    laby.run()
 

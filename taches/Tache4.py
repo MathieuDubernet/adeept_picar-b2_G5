@@ -71,11 +71,11 @@ class AdeeptMotorController:
         - angle: angle cible pour le servo de direction (L C R)
         """
         if angle == "L":
-            self.servo_controller.setAngle(1, self.SERVO_LEFT)
+            self.servo_controller.setAngle(0, self.SERVO_LEFT)
         elif angle == "R":
-            self.servo_controller.setAngle(1, self.SERVO_RIGHT)
+            self.servo_controller.setAngle(0, self.SERVO_RIGHT)
         elif angle == "C":
-            self.servo_controller.setAngle(1, self.SERVO_CENTER)
+            self.servo_controller.setAngle(0, self.SERVO_CENTER)
         else:
             raise ValueError("Angle invalide. Choix possibles : 'L', 'C', 'R'.")
 
