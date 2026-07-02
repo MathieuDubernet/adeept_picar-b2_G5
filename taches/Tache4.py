@@ -7,8 +7,8 @@ from Tache3 import ServoController
 
 class AdeeptMotorController:
 
-    MOTOR_M1_IN1 = 8       # Pôle positif M1(à changer selon le robot)
-    MOTOR_M1_IN2 = 9       # Pôle négatif M1(à changer selon le robot)
+    MOTOR_M1_IN1 = 9      # Pôle positif M1(à changer selon le robot)
+    MOTOR_M1_IN2 = 8       # Pôle négatif M1(à changer selon le robot)
 
     DIR_FORWARD  =  1
     DIR_BACKWARD = -1
@@ -36,7 +36,7 @@ class AdeeptMotorController:
         self.direction_channel = 0
 
         # Angles de direction configurables
-        self.SERVO_CENTER    = 140 # à changer selon le robot
+        self.SERVO_CENTER    = 143 # à changer selon le robot
         self.SERVO_LEFT      = self.SERVO_CENTER - 30
         self.SERVO_RIGHT     = self.SERVO_CENTER + 30
         self.SERVO_SLIGHT_LEFT  = self.SERVO_CENTER - 15
@@ -56,6 +56,8 @@ class AdeeptMotorController:
         - direction: DIR_FORWARD (+1) ou DIR_BACKWARD (-1)
         - speed_pct: vitesse en pourcentage (0-100)
         """
+        
+        travelTime = time.time()
 
         speed_pct = max(0, min(100, speed_pct))
         self.motor1.throttle = (speed_pct / 100) * direction
@@ -65,7 +67,7 @@ class AdeeptMotorController:
         Arrêt propre : coupe le moteur, recentre la direction et libère le PCA9685.
         """
         self.motorStop()
-        self.servo_controller.setAngle(1, self.SERVO_CENTER)
+        self.servo_controller.setAngle(0, self.SERVO_CENTER)
         self.servo_controller.cleanup()
         print("[SYS] GPIO libérés.")
 
@@ -115,15 +117,15 @@ def main(AdeeptMotor):
             elif cmd == "1":
                 AdeeptMotor.MotorRamp(AdeeptMotor.DIR_FORWARD, 25)
             elif cmd == "2":
-                AdeeptMotor.MotorRamp(AdeeptMotor.DIR_FORWARD, 0, start_speed=25)
+                AdeeptMotor.MotorRamp(AdeeptMotor.DIR_BACKWARD, 0, start_speed=25)
             elif cmd == "3":
                 AdeeptMotor.motorStop()
             elif cmd == "4":
-                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_CENTER)
+                AdeeptMotor.servo_controller.setAngle(0, AdeeptMotor.SERVO_CENTER)
             elif cmd == "5":
-                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_LEFT)
+                AdeeptMotor.servo_controller.setAngle(0, AdeeptMotor.SERVO_LEFT)
             elif cmd == "6":
-                AdeeptMotor.servo_controller.setAngle(1, AdeeptMotor.SERVO_RIGHT)
+                AdeeptMotor.servo_controller.setAngle(0, AdeeptMotor.SERVO_RIGHT)
             else:
                 print("Commande invalide (0 à 6).")
 
