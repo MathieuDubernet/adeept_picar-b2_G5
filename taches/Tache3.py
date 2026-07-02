@@ -46,7 +46,7 @@ class ServoController(object):
             return self.angle_max
         return angle
 
-    def setAngle(self, channel, angle, step=20, delay=0.1):
+    def setAngle(self, channel, angle, step=2000, delay=0.1):
         """
         Déplace un servo vers l'angle cible de façon progressive (pas à pas)
         pour éviter les à-coups mécaniques.
