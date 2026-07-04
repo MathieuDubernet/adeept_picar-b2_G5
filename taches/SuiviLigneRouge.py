@@ -1,9 +1,7 @@
 import time
 from collections import deque
-
 import numpy as np
 import cv2
-
 from Tache3 import ServoController
 from Tache4 import AdeeptMotorController
 
@@ -16,9 +14,6 @@ except ImportError:
 
 
 class SuiviLigneRouge:
-    """
-
-    """
 
     def __init__(self):
         self.LARGEUR, self.HAUTEUR = 640, 480
