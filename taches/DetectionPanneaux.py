@@ -51,20 +51,17 @@ class DetectionPanneaux:
 
         # Nettoyage morphologique (enlève le bruit, comble les petits trous)
         noyau = np.ones((5, 5), np.uint8)
-        masque_rouge = cv2.morphologyEx(masque_rouge, cv2.MORPH_OPEN, noyau)
-        masque_rouge = cv2.morphologyEx(masque_rouge, cv2.MORPH_CLOSE, noyau)
+        noyau_fin = np.ones((3, 3), np.uint8)
+        masque_rouge = cv2.morphologyEx(masque_rouge, cv2.MORPH_OPEN, noyau_fin)
+        masque_rouge = cv2.morphologyEx(masque_rouge, cv2.MORPH_CLOSE, noyau_fin)
         masque_bleu = cv2.morphologyEx(masque_bleu, cv2.MORPH_OPEN, noyau)
         masque_bleu = cv2.morphologyEx(masque_bleu, cv2.MORPH_CLOSE, noyau)
 
         return masque_rouge, masque_bleu
 
     def _est_triangle(self, contour):
-        """
-        Vérifie si le contour (bord rouge du panneau de chantier) approxime
-        un triangle à 3 sommets.
-        """
         perimetre = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.04 * perimetre, True)
+        approx = cv2.approxPolyDP(contour, 0.05 * perimetre, True)
         return len(approx) == 3, approx
 
     def _est_carre_bleu(self, contour, masque_bleu):
@@ -100,10 +97,16 @@ class DetectionPanneaux:
             masque_rouge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        #print(f"[DEBUG] {len(contours)} contour(s) dans le masque rouge")  # TEMP
+
         for c in contours:
             aire = cv2.contourArea(c)
             if aire < self.AIRE_MIN:
                 continue
+
+            perimetre = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.04 * perimetre, True)
+            #print(f"[DEBUG] aire={aire:.0f} sommets={len(approx)}")  # TEMP
 
             ok, approx = self._est_triangle(c)
             if not ok:
@@ -167,15 +170,12 @@ class DetectionPanneaux:
         if frame is None:
             return []
 
-        hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)  # Picamera2 RGB888 -> RGB
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)  # RGB888 Picamera2 = BGR en pratique
         masque_rouge, masque_bleu = self._creer_masques(hsv)
 
         detections = []
         detections += self._detecter_triangles_rouges(masque_rouge, frame)
         detections += self._detecter_carres_bleus(masque_bleu, frame)
-
-        cv2.imshow("Detection panneaux", frame)
-        cv2.waitKey(1)
 
         return detections
 
@@ -183,7 +183,6 @@ class DetectionPanneaux:
         """Arrêt propre : stoppe puis ferme le flux caméra."""
         self.picam.stop()
         self.picam.close()
-        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
