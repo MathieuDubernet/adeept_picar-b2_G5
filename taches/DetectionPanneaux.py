@@ -97,16 +97,10 @@ class DetectionPanneaux:
             masque_rouge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
-        #print(f"[DEBUG] {len(contours)} contour(s) dans le masque rouge")  # TEMP
-
         for c in contours:
             aire = cv2.contourArea(c)
             if aire < self.AIRE_MIN:
                 continue
-
-            perimetre = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.04 * perimetre, True)
-            #print(f"[DEBUG] aire={aire:.0f} sommets={len(approx)}")  # TEMP
 
             ok, approx = self._est_triangle(c)
             if not ok:
@@ -162,13 +156,14 @@ class DetectionPanneaux:
 
     def detecter_panneau(self):
         """
-        Capture une image et retourne la liste des panneaux détectés,
-        chacun sous forme de dict {forme, bbox, aire, centre}.
-        Retourne une liste vide si rien n'est détecté.
+        Capture une image et retourne le type de panneau détecté le plus grand :
+        - "PanneauTriangle" pour un panneau de chantier
+        - "PanneauCarre" pour un panneau de tunnel
+        - None si aucun panneau n'est visible.
         """
         frame = self.picam.capture_array()
         if frame is None:
-            return []
+            return None
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)  # RGB888 Picamera2 = BGR en pratique
         masque_rouge, masque_bleu = self._creer_masques(hsv)
@@ -177,7 +172,20 @@ class DetectionPanneaux:
         detections += self._detecter_triangles_rouges(masque_rouge, frame)
         detections += self._detecter_carres_bleus(masque_bleu, frame)
 
-        return detections
+        # Si aucune détection, on renvoie directement None
+        if not detections:
+            return None
+
+        # S'il y a plusieurs détections, on prend la plus grande (aire maximale)
+        meilleure_detection = max(detections, key=lambda d: d["aire"])
+
+        # Traduction au format demandé
+        if meilleure_detection["forme"] == "panneau_chantier":
+            return "PanneauTriangle"
+        elif meilleure_detection["forme"] == "panneau_tunnel":
+            return "PanneauCarre"
+
+        return None
 
     def liberer(self):
         """Arrêt propre : stoppe puis ferme le flux caméra."""
@@ -189,9 +197,11 @@ if __name__ == "__main__":
     detection = DetectionPanneaux()
     try:
         while True:
-            panneaux = detection.detecter_panneau()
-            for p in panneaux:
-                print(f"Panneau détecté : {p['forme']} à {p['centre']} (aire={p['aire']:.0f})")
+            panneau = detection.detecter_panneau()
+            if panneau is not None:
+                print(f"Résultat : {panneau}")
+            else:
+                print("Résultat : None (Aucun panneau)")
             time.sleep(0.1)
     except KeyboardInterrupt:
         pass
